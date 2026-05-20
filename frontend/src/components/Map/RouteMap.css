@@ -1,0 +1,183 @@
+.route-map-wrapper {
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: var(--border-glass);
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.map-header {
+  background: var(--dandel-puff-dark);
+  padding: 1rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border-bottom: var(--border-light);
+}
+
+.map-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dot-pulse {
+  width: 8px;
+  height: 8px;
+  background-color: var(--dandel-green);
+  border-radius: 50%;
+  position: relative;
+  display: inline-block;
+}
+
+.dot-pulse::after {
+  content: "";
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background-color: var(--dandel-green);
+  border-radius: 50%;
+  animation: pulse-ring 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+
+.map-title-row h4 {
+  font-weight: 700;
+  color: var(--dandel-meadow-dark);
+  font-size: 0.95rem;
+}
+
+.map-legend {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--dandel-meadow-light);
+}
+
+.legend-line {
+  width: 24px;
+  height: 4px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* Кастомні маркери на Leaflet */
+.map-custom-marker {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  color: white;
+  font-weight: bold;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  border: 2.5px white solid;
+  position: relative;
+}
+
+.marker-pulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid inherit;
+  animation: marker-pulse-anim 2s infinite ease-out;
+  pointer-events: none;
+}
+
+@keyframes marker-pulse-anim {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+.map-car-marker {
+  width: 38px;
+  height: 38px;
+  background-color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+  border: 3px solid var(--dandel-gold);
+  font-size: 1.1rem;
+}
+
+.car-emoji {
+  animation: car-bounce 1.5s infinite ease-in-out;
+}
+
+@keyframes car-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+/* Спрощена векторна SVG карта */
+.svg-map-fallback {
+  width: 100%;
+  height: 400px;
+  background: radial-gradient(circle, #F7FAF7 0%, #E9EFEA 100%);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.ukraine-vector-map {
+  width: 100%;
+  height: 100%;
+  max-height: 360px;
+  padding: 1rem;
+}
+
+.animated-dash {
+  stroke-dasharray: 8;
+  animation: dash 30s linear infinite;
+}
+
+@keyframes dash {
+  to {
+    stroke-dashoffset: -1000;
+  }
+}
+
+.map-fallback-banner {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(13, 24, 17, 0.85);
+  color: white;
+  padding: 0.4rem 1rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+  box-shadow: var(--shadow-sm);
+}
+
+.ukraine-vector-map circle {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.ukraine-vector-map circle:hover {
+  r: 8px;
+  fill: var(--dandel-green);
+}

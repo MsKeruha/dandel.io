@@ -1,0 +1,505 @@
+.criteria-selector-container {
+  margin-top: 1.5rem;
+}
+
+/* Оновлена область вибору тарифів та оформлення */
+.delivery-options-area {
+  margin-top: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+.divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--dandel-puff-dark);
+}
+
+.divider-text {
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--dandel-meadow-light);
+  white-space: nowrap;
+}
+
+.layout-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .layout-grid {
+    grid-template-columns: 1.1fr 0.9fr;
+  }
+}
+
+.panel-card {
+  padding: 1.5rem;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  border-bottom: var(--border-light);
+  padding-bottom: 1rem;
+}
+
+.panel-header h3 {
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.inputs-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 576px) {
+  .input-row {
+    flex-direction: row;
+  }
+}
+
+.input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.input-group label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+}
+
+.cross-border-badge {
+  background: var(--dandel-green-light);
+  border: 1px solid rgba(63, 143, 82, 0.15);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--dandel-green);
+  font-weight: 600;
+}
+
+/* Автокомпліт міст */
+.autocomplete-group {
+  position: relative;
+}
+
+.search-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  width: 100%;
+  z-index: 100;
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background: white;
+  border: 1px solid rgba(26, 46, 32, 0.1);
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.suggestion-item {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  transition: all var(--transition-fast);
+}
+
+.suggestion-item:hover {
+  background: var(--dandel-puff);
+  color: var(--dandel-green);
+}
+
+.suggestion-item strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.suggestion-item span {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+/* SAW повзунки */
+.saw-weights-section {
+  border-top: var(--border-light);
+  padding-top: 1.5rem;
+  margin-top: 1rem;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.section-title h4 {
+  font-weight: 800;
+  font-size: 1rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.saw-instruction {
+  font-size: 0.8rem;
+  color: var(--dandel-meadow-light);
+  margin-bottom: 1.25rem;
+}
+
+.sliders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--dandel-meadow-dark);
+}
+
+.weight-percent {
+  font-weight: 700;
+  color: var(--dandel-green);
+}
+
+/* Кастомний рендер повзунка */
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--dandel-puff-dark);
+  border-radius: var(--radius-full);
+  outline: none;
+  padding: 0;
+  border: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--dandel-green);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.1s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  background: #357A44;
+}
+
+/* Картки тарифів */
+.scenarios-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .scenarios-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+
+.scenario-card {
+  padding: 1.25rem;
+  cursor: pointer;
+  border-radius: var(--radius-lg);
+  border: var(--border-glass);
+  position: relative;
+  transition: all var(--transition-normal);
+}
+
+.scenario-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.scenario-card.selected {
+  background: white;
+  border-color: var(--dandel-green);
+  box-shadow: 0 8px 30px rgba(63, 143, 82, 0.08);
+}
+
+.scenario-card.recommended {
+  border: 2px solid var(--dandel-gold);
+}
+
+.recommended-badge {
+  position: absolute;
+  top: -10px;
+  right: 15px;
+  background: var(--dandel-gold);
+  color: var(--dandel-meadow-dark);
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.scenario-title-area {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.scenario-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--dandel-puff-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.scenario-card.selected .scenario-icon {
+  background: var(--dandel-green-light);
+}
+
+.scenario-title-area h5 {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.saw-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+  background: rgba(26, 46, 32, 0.05);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-sm);
+  display: inline-block;
+  margin-top: 0.15rem;
+}
+
+.scenario-price {
+  font-weight: 800;
+  font-size: 1.15rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.scenario-desc {
+  font-size: 0.8rem;
+  color: var(--dandel-meadow-light);
+  margin-bottom: 0.85rem;
+}
+
+.scenario-stats {
+  display: flex;
+  gap: 1.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+  border-top: 1px solid rgba(26, 46, 32, 0.04);
+  padding-top: 0.75rem;
+}
+
+.scenario-stats .stat {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Форма чекауту */
+.checkout-card {
+  padding: 2.25rem;
+}
+
+.checkout-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.special-options-box, .bonuses-redeem-box {
+  background: var(--dandel-puff);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border: var(--border-light);
+}
+
+.checkbox-subtext {
+  font-size: 0.75rem;
+  color: var(--dandel-meadow-light);
+  margin-top: 0.15rem;
+  line-height: 1.4;
+}
+
+.checkout-summary {
+  background: var(--dandel-puff-dark);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--dandel-meadow-light);
+}
+
+.summary-row.discount {
+  color: var(--dandel-green);
+}
+
+.summary-row.total {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--dandel-meadow-dark);
+}
+
+.checkout-summary hr {
+  border: none;
+  border-top: 1px solid rgba(26, 46, 32, 0.1);
+  margin: 0.25rem 0;
+}
+
+.bonus-earn-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--dandel-green);
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.75rem;
+  align-self: flex-start;
+  box-shadow: var(--shadow-sm);
+}
+
+.checkout-submit-btn {
+  width: 100%;
+  padding: 0.9rem 1.5rem;
+  font-size: 1rem;
+  box-shadow: var(--shadow-gold);
+}
+
+.checkout-submit-btn:hover {
+  box-shadow: 0 12px 30px rgba(63, 143, 82, 0.25);
+}
+
+/* Toast сповіщення */
+.success-toast {
+  background: var(--dandel-green);
+  color: white;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 10px 25px rgba(63, 143, 82, 0.2);
+  animation: slideIn 0.3s ease forwards;
+}
+
+.success-toast h5 {
+  font-weight: 800;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+}
+
+.success-toast p {
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+
+.error-toast {
+  background: var(--dandel-danger-bg);
+  color: var(--dandel-danger-text);
+  border: 1px solid rgba(114, 28, 36, 0.15);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-15px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

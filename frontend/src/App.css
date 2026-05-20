@@ -1,0 +1,575 @@
+.dashboard-container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Навігаційна панель */
+.main-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.75rem;
+  border-radius: var(--radius-lg);
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  background: white;
+}
+
+.navbar-logo-area {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.navbar-logo-area h1 {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--dandel-meadow-dark);
+  line-height: 1.1;
+}
+
+.navbar-logo-area span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+}
+
+.navbar-tabs {
+  display: flex;
+  background: var(--dandel-puff-dark);
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+  gap: 0.25rem;
+}
+
+.tab-link {
+  background: none;
+  border: none;
+  color: var(--dandel-meadow-light);
+  padding: 0.6rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: calc(var(--radius-md) - 0.25rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all var(--transition-fast);
+}
+
+.tab-link:hover {
+  color: var(--dandel-meadow-dark);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.tab-link.active {
+  background: white;
+  color: var(--dandel-meadow-dark);
+  box-shadow: var(--shadow-sm);
+}
+
+.navbar-user-area {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.user-info-text {
+  display: flex;
+  flex-direction: column;
+  text-align: right;
+  font-size: 0.8rem;
+}
+
+.user-info-text strong {
+  color: var(--dandel-meadow-dark);
+}
+
+.user-loyalty-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--dandel-green);
+}
+
+.user-bonuses-pill {
+  background: var(--dandel-gold-glow);
+  color: var(--dandel-meadow-dark);
+  border: 1.5px solid var(--dandel-gold);
+  border-radius: var(--radius-full);
+  padding: 0.3rem 0.85rem;
+  font-weight: 800;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.user-bonuses-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-gold);
+}
+
+.logout-btn {
+  background: var(--dandel-puff);
+  border: 1px solid rgba(26, 46, 32, 0.1);
+  color: var(--dandel-meadow-light);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.logout-btn:hover {
+  background: var(--dandel-danger-bg);
+  color: var(--dandel-danger-text);
+  border-color: rgba(114, 28, 36, 0.15);
+}
+
+/* Hero промо-банер */
+.hero-section {
+  padding: 2.25rem;
+  background: linear-gradient(135deg, white 0%, var(--dandel-puff-dark) 100%);
+  border-radius: var(--radius-lg);
+  margin-bottom: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero-section::before {
+  content: "";
+  position: absolute;
+  font-size: 15rem;
+  right: -2rem;
+  bottom: -4rem;
+  opacity: 0.05;
+  transform: rotate(15deg);
+}
+
+.hero-content h2 {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: var(--dandel-meadow-dark);
+  margin-bottom: 0.75rem;
+  line-height: 1.2;
+}
+
+.hero-content p {
+  color: var(--dandel-meadow-light);
+  font-size: 0.95rem;
+  max-width: 820px;
+  margin-bottom: 2rem;
+  line-height: 1.6;
+}
+
+.hero-stats-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .hero-stats-row {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.hero-stat-card {
+  background: white;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: var(--border-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-stat-card h3 {
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--dandel-green);
+  margin-bottom: 0.25rem;
+}
+
+.hero-stat-card span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+}
+
+/* Форма авторизації */
+.auth-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 2.25rem;
+  background: white;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.auth-brand {
+  margin-bottom: 1.75rem;
+}
+
+.auth-brand h2 {
+  font-size: 1.75rem;
+  font-weight: 900;
+  color: var(--dandel-meadow-dark);
+}
+
+.auth-brand p {
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-light);
+  font-weight: bold;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.auth-btn {
+  width: 100%;
+  padding: 0.85rem;
+  font-size: 0.95rem;
+}
+
+.auth-toggle {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-light);
+  font-weight: 600;
+}
+
+.auth-toggle span {
+  color: var(--dandel-green);
+  cursor: pointer;
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.demo-notice {
+  background: var(--dandel-risk-bg);
+  border: 1px solid var(--dandel-risk-border);
+  color: var(--dandel-risk-text);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+}
+
+/* Вкладка Мої доставки */
+.deliveries-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 992px) {
+  .deliveries-layout {
+    grid-template-columns: 320px 1fr;
+  }
+}
+
+.deliveries-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sidebar-title {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.deliveries-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.delivery-item-card {
+  padding: 1rem;
+  background: white;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  border: var(--border-light);
+  transition: all var(--transition-fast);
+}
+
+.delivery-item-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--dandel-mint);
+  box-shadow: var(--shadow-md);
+}
+
+.delivery-item-card.active {
+  border-color: var(--dandel-green);
+  box-shadow: 0 4px 15px rgba(63, 143, 82, 0.08);
+  background: var(--dandel-green-light);
+}
+
+.item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.item-scenario {
+  font-size: 1rem;
+}
+
+.item-header strong {
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.item-status-pill {
+  margin-left: auto;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+}
+
+.item-status-pill.Created { background: var(--dandel-puff-dark); color: var(--dandel-meadow-light); }
+.item-status-pill.Processing { background: var(--dandel-risk-bg); color: var(--dandel-risk-text); }
+.item-status-pill.In_Transit { background: var(--dandel-green-light); color: var(--dandel-green); }
+.item-status-pill.Customs { background: #D9EDF7; color: #31708F; }
+.item-status-pill.Delivered { background: #DFF0D8; color: #3C763D; }
+
+.item-route-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-dark);
+  margin-bottom: 0.75rem;
+}
+
+.item-footer {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--dandel-meadow-light);
+  border-top: 1px solid rgba(26, 46, 32, 0.05);
+  padding-top: 0.5rem;
+}
+
+/* Трекер активного замовлення */
+.tracker-panel {
+  padding: 1.5rem;
+  background: white;
+}
+
+.tracker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.tracker-header h3 {
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.tracker-header p {
+  font-size: 0.8rem;
+  color: var(--dandel-meadow-light);
+  font-weight: bold;
+}
+
+.simulate-btn {
+  padding: 0.6rem 1.1rem;
+  font-size: 0.8rem;
+  box-shadow: var(--shadow-gold);
+}
+
+/* Шкала виконання */
+.execution-timeline {
+  margin-top: 1.5rem;
+  border-top: var(--border-light);
+  padding-top: 1.5rem;
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  font-weight: bold;
+  font-size: 0.85rem;
+}
+
+.timeline-header h5 {
+  color: var(--dandel-meadow-dark);
+}
+
+.percentage-completion {
+  color: var(--dandel-green);
+}
+
+.timeline-bar-wrapper {
+  height: 8px;
+  background: var(--dandel-puff-dark);
+  border-radius: var(--radius-full);
+  margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.timeline-bar-fill {
+  height: 100%;
+  background: var(--dandel-green);
+  border-radius: var(--radius-full);
+  transition: width var(--transition-normal);
+}
+
+.timeline-points {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+}
+
+.point-label.active {
+  color: var(--dandel-green);
+  font-weight: 800;
+}
+
+/* Блок фотоконтролю */
+.checkpoint-photo-section {
+  margin-top: 1.5rem;
+  border-top: var(--border-light);
+  padding-top: 1.5rem;
+}
+
+.checkpoint-photo-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background: var(--dandel-puff);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  border: var(--border-light);
+  margin-top: 1rem;
+}
+
+@media (min-width: 576px) {
+  .checkpoint-photo-card {
+    flex-direction: row;
+  }
+}
+
+.checkpoint-img {
+  width: 100%;
+  max-width: 180px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(26, 46, 32, 0.1);
+  box-shadow: var(--shadow-sm);
+}
+
+.checkpoint-photo-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.photo-badge {
+  background: var(--dandel-green-light);
+  color: var(--dandel-green);
+  align-self: flex-start;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+.checkpoint-photo-details p {
+  font-size: 0.8rem;
+  color: var(--dandel-meadow-light);
+  line-height: 1.4;
+}
+
+.driver-meta {
+  font-size: 0.75rem;
+  color: var(--dandel-meadow-dark);
+  margin-top: auto;
+  border-top: 1px solid rgba(26, 46, 32, 0.05);
+  padding-top: 0.5rem;
+}
+
+.checkpoint-photo-empty {
+  text-align: center;
+  background: var(--dandel-puff);
+  color: var(--dandel-meadow-light);
+  border-radius: var(--radius-md);
+  padding: 2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px dashed rgba(26, 46, 32, 0.15);
+  margin-top: 1rem;
+}
+
+.empty-deliveries-card {
+  padding: 3rem;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  max-width: 600px;
+  margin: 4rem auto;
+}
+
+.empty-deliveries-card h4 {
+  font-weight: 800;
+  font-size: 1.15rem;
+}
+
+.empty-deliveries-card p {
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-light);
+  max-width: 420px;
+}
+
+/* Футер */
+.main-footer {
+  margin-top: auto;
+  border-top: var(--border-light);
+  padding: 1.75rem 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--dandel-meadow-light);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}

@@ -1,0 +1,296 @@
+.bonus-system-container {
+  margin-top: 1.5rem;
+}
+
+.bonus-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 992px) {
+  .bonus-grid {
+    grid-template-columns: 1.2fr 0.8fr;
+  }
+}
+
+/* Балансова картка */
+.balance-card {
+  padding: 1.75rem;
+  background: white;
+  border-radius: var(--radius-lg);
+  border: var(--border-glass);
+}
+
+.balance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.balance-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.balance-title h4 {
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.balance-title p {
+  font-size: 0.75rem;
+  color: var(--dandel-meadow-light);
+}
+
+.level-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 800;
+  box-shadow: var(--shadow-sm);
+}
+
+.level-emoji {
+  font-size: 1rem;
+}
+
+.balance-value-row {
+  margin: 1.5rem 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.balance-value {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--dandel-meadow-dark);
+  line-height: 1;
+}
+
+.balance-value span {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+  margin-left: 0.25rem;
+}
+
+.rate-badge {
+  background: var(--dandel-green-light);
+  color: var(--dandel-green);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Секція шкали прогресу */
+.progress-section {
+  margin: 1.5rem 0 1rem 0;
+}
+
+.progress-bar-wrapper {
+  height: 8px;
+  background: var(--dandel-puff-dark);
+  border-radius: var(--radius-full);
+  position: relative;
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--transition-slow);
+}
+
+.progress-marker {
+  position: absolute;
+  top: -8px;
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  border: 1.5px solid var(--dandel-puff-dark);
+}
+
+.progress-marker:hover {
+  transform: scale(1.3);
+}
+
+.marker-0 { left: 0%; transform: translateX(-50%); }
+.marker-100 { left: 20%; transform: translateX(-50%); }
+.marker-250 { left: 50%; transform: translateX(-50%); }
+.marker-500 { left: 100%; transform: translateX(-50%); }
+
+.progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--dandel-meadow-light);
+}
+
+.next-level-text {
+  font-size: 0.75rem;
+  color: var(--dandel-meadow-light);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-top: 1px solid rgba(26, 46, 32, 0.05);
+  padding-top: 1rem;
+}
+
+/* Правила програми */
+.rules-card {
+  padding: 1.5rem;
+  background: white;
+}
+
+.rules-card h4 {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--dandel-meadow-dark);
+  margin-bottom: 1.25rem;
+}
+
+.rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.rule-item {
+  display: flex;
+  gap: 0.85rem;
+}
+
+.rule-number {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--dandel-green-light);
+  color: var(--dandel-green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.rule-item h6 {
+  font-weight: 800;
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-dark);
+  margin-bottom: 0.15rem;
+}
+
+.rule-item p {
+  font-size: 0.75rem;
+  color: var(--dandel-meadow-light);
+  line-height: 1.4;
+}
+
+/* Історія трансакцій */
+.history-card {
+  padding: 1.5rem;
+  background: white;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+  border-bottom: var(--border-light);
+  padding-bottom: 0.75rem;
+}
+
+.history-header h4 {
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--dandel-meadow-dark);
+}
+
+.history-loading {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-light);
+  padding: 2rem;
+}
+
+.history-empty {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-light);
+  padding: 2.5rem;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.85rem;
+}
+
+.history-table th {
+  padding: 0.75rem 1rem;
+  font-weight: bold;
+  color: var(--dandel-meadow-light);
+  background: var(--dandel-puff);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.history-table td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(26, 46, 32, 0.05);
+  color: var(--dandel-meadow-dark);
+}
+
+.date-cell {
+  white-space: nowrap;
+  font-weight: 500;
+  color: var(--dandel-meadow-light);
+}
+
+.desc-cell {
+  font-weight: 600;
+}
+
+.amount-cell {
+  font-weight: bold;
+}
+
+.amount-cell.positive {
+  color: var(--dandel-green);
+}
+
+.amount-cell.negative {
+  color: #D9534F;
+}
+
+.text-right {
+  text-align: right;
+}

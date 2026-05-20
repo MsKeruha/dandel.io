@@ -1,0 +1,56 @@
+# --- Root ---
+.env
+.env.local
+.env.*.local
+*.log
+
+# --- Backend (Python) ---
+backend/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+backend/.pytest_cache/
+backend/.venv/
+backend/venv/
+backend/env/
+backend/ENV/
+backend/build/
+backend/develop-eggs/
+backend/dist/
+backend/downloads/
+backend/eggs/
+backend/.lib/
+backend/lib/
+backend/parts/
+backend/sdist/
+backend/var/
+backend/wheels/
+backend/pip-wheel-metadata/
+backend/share/python-wheels/
+backend/*.egg-info/
+backend/.installed.cfg
+backend/*.egg
+backend/MANIFEST
+backend/.mypy_cache/
+backend/.dmypy.json
+backend/dmypy.json
+backend/.hypothesis/
+
+# --- Frontend (Node/React) ---
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/coverage/
+frontend/.next/
+frontend/.vuepress/dist/
+frontend/.cache/
+
+# --- IDEs & OS ---
+.vscode/
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace

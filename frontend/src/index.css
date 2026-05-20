@@ -1,0 +1,313 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Палітра dandel.io (Одуванчик, повітря, луг) */
+  --dandel-gold: #FFC72C;
+  --dandel-gold-hover: #F2B200;
+  --dandel-gold-glow: rgba(255, 199, 44, 0.25);
+  
+  --dandel-meadow-dark: #0D1811;
+  --dandel-meadow-mid: #1A2E20;
+  --dandel-meadow-light: #2A4833;
+  
+  --dandel-green: #3F8F52;
+  --dandel-green-light: #EBF7ED;
+  
+  --dandel-mint: #86C196;
+  --dandel-puff: #F4F8F5;
+  --dandel-puff-dark: #E2ECE5;
+  
+  --dandel-risk-bg: #FFF3CD;
+  --dandel-risk-border: #FFEBAA;
+  --dandel-risk-text: #856404;
+
+  --dandel-danger-bg: #F8D7DA;
+  --dandel-danger-text: #721C24;
+
+  /* Геометрія та ефекти (Покращений Pomelo рівень) */
+  --radius-sm: 0.5rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.5rem;
+  --radius-full: 9999px;
+  
+  --shadow-sm: 0 2px 8px rgba(13, 24, 17, 0.04);
+  --shadow-md: 0 8px 24px rgba(13, 24, 17, 0.08);
+  --shadow-lg: 0 16px 40px rgba(13, 24, 17, 0.12);
+  --shadow-gold: 0 10px 25px rgba(255, 199, 44, 0.3);
+  
+  --border-light: 1px solid rgba(26, 46, 32, 0.08);
+  --border-glass: 1px solid rgba(255, 255, 255, 0.4);
+  
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--dandel-puff);
+  color: var(--dandel-meadow-dark);
+  min-height: 100vh;
+  overflow-x: hidden;
+  position: relative;
+  line-height: 1.6;
+}
+
+/* Красивий анімований бекграунд з насінням кульбаби, що летить */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    radial-gradient(at 10% 10%, rgba(255, 199, 44, 0.04) 0px, transparent 50%),
+    radial-gradient(at 90% 80%, rgba(63, 143, 82, 0.05) 0px, transparent 50%),
+    radial-gradient(at 50% 50%, rgba(134, 193, 150, 0.03) 0px, transparent 50%);
+  z-index: -2;
+  pointer-events: none;
+}
+
+/* Створюємо летюче насіння кульбаби на бекграунді */
+.dandelion-seeds-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.seed {
+  position: absolute;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.1) 80%);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: float-wind 20s infinite linear;
+  will-change: transform;
+}
+
+.seed::after {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 12px;
+  background: rgba(26, 46, 32, 0.15);
+  top: 50%;
+  left: 50%;
+  transform: rotate(30deg);
+  transform-origin: top;
+  will-change: transform;
+}
+
+/* Анімація вітру, що розвіює насіння кульбаби */
+@keyframes float-wind {
+  0% {
+    transform: translate3d(0, 100vh, 0) rotate(0deg) scale(0.8);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.6;
+  }
+  90% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate3d(120vw, -10vh, 0) rotate(360deg) scale(1.2);
+    opacity: 0;
+  }
+}
+
+/* Стилізація скроллбару */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--dandel-puff);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--dandel-puff-dark);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dandel-mint);
+}
+
+/* Кастомні елементи інтерфейсу (Pomelo стиль) */
+input, select, textarea {
+  font-family: inherit;
+  background-color: white;
+  border: 1px solid rgba(26, 46, 32, 0.1);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  color: var(--dandel-meadow-dark);
+  font-size: 0.95rem;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--dandel-green);
+  box-shadow: 0 0 0 3px rgba(63, 143, 82, 0.15);
+}
+
+button {
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  border: none;
+  transition: all var(--transition-normal);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-primary {
+  background-color: var(--dandel-gold);
+  color: var(--dandel-meadow-dark);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background-color: var(--dandel-gold-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-gold);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  background-color: white;
+  color: var(--dandel-meadow-dark);
+  border: 1px solid rgba(26, 46, 32, 0.12);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-secondary:hover {
+  background-color: var(--dandel-puff);
+  border-color: var(--dandel-mint);
+  transform: translateY(-2px);
+}
+
+.btn-accent {
+  background-color: var(--dandel-green);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-accent:hover {
+  background-color: #357A44;
+  transform: translateY(-2px);
+}
+
+/* Скляна картка (Glassmorphism) */
+.glass-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: var(--border-glass);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius-lg);
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.glass-card:hover {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Плавна поява сторінок */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn var(--transition-normal) forwards;
+}
+
+/* Кастомний сегментований перемикач (Segmented Controls) */
+.segmented-control {
+  background: var(--dandel-puff-dark);
+  border-radius: var(--radius-md);
+  padding: 0.25rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.segmented-item {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--dandel-meadow-light);
+  border-radius: calc(var(--radius-md) - 0.25rem);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.segmented-item.active {
+  background: white;
+  color: var(--dandel-meadow-dark);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Кастомний чекбокс */
+.checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-custom {
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid var(--dandel-mint);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  background-color: white;
+}
+
+.checkbox-container input {
+  display: none;
+}
+
+.checkbox-container input:checked + .checkbox-custom {
+  background-color: var(--dandel-green);
+  border-color: var(--dandel-green);
+}
+
+.checkbox-container input:checked + .checkbox-custom::after {
+  content: "✓";
+  color: white;
+  font-size: 0.85rem;
+  font-weight: bold;
+}

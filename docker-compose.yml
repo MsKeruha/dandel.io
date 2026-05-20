@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: dandel_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ot.postgre
+      POSTGRES_DB: dandelion
+    ports:
+      - "5432:5432"
+    volumes:
+      - dandel_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dandelion"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: dandel_backend
+    restart: always
+    environment:
+      - DB_USER=postgres
+      - DB_PASSWORD=ot.postgre
+      - DB_NAME=dandelion
+      - DB_HOST=db
+      - DB_PORT=5432
+      - SECRET_KEY=dandel_super_secret_secure_key_2026_dandelion
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=1440
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: dandel_frontend
+    restart: always
+    environment:
+      - VITE_API_TARGET=http://backend:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  dandel_db_data:

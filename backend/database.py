@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-# Завантажуємо змінні середовища з файлу .env
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"))
+# Завантажуємо змінні середовища з файлу .env (не переписуємо вже існуючі в Docker)
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), ".env"), override=False)
 
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")

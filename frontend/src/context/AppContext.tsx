@@ -110,8 +110,8 @@ interface AppContextType {
     isCrossBorder: boolean,
     weights: { price: number; time: number; safety: number; eco: number },
     coords?: { origin: [number, number] | null; dest: [number, number] | null }
-  ) => Promise<void>;
-  createDelivery: (data: any) => Promise<Delivery | null>;
+  ) => Promise<DeliveryCalculateResponse | null>;
+  createDelivery: (data: any) => Promise<{ delivery: Delivery | null, password?: string }>;
   fetchMyDeliveries: () => Promise<void>;
   fetchChatMessages: () => Promise<void>;
   sendChatMessage: (content: string) => Promise<void>;
@@ -319,11 +319,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isCrossBorder: boolean,
     weights: { price: number; time: number; safety: number; eco: number },
     coords?: { origin: [number, number] | null; dest: [number, number] | null }
-  ) => {
+  ): Promise<DeliveryCalculateResponse | null> => {
     const typeCoeffs: Record<string, number> = {
       'Стандартний': 1.0, 'Крихкий': 1.4, 'Терморежим': 1.8, 'Великогабаритний': 2.2
     };
     const tcf = typeCoeffs[cargoType] || 1.0;
+    
+    const start: [number, number] = coords?.origin || [50.45, 30.52];
+    const end: [number, number] = coords?.dest || [49.83, 24.02];
 
     const getPrices = (distance: number) => ({
       exp: (600 + distance * 22 + weight * 50) * tcf,
@@ -332,22 +335,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     if (currentCalculation && currentCalculation.origin === origin && currentCalculation.destination === dest) {
-      const start = coords?.origin || [50.45, 30.52];
-      const end = coords?.dest || [49.83, 24.02];
       const dist = Math.sqrt(Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2)) * 100;
       const p = getPrices(dist);
 
       const calcSaw = (price: number, hours: number, safety: number, co2: number) => {
         const totalWeight = (weights.price + weights.time + weights.safety + weights.eco) || 1;
-        const maxPrice = Math.max(p.exp, p.econ, p.safe) || 1;
-        const maxHours = Math.max(dist / 85, dist / 40 + 12, dist / 55 + 2) || 1;
-        const maxCo2 = (dist * 0.42 + 1) || 1;
+        const minPrice = Math.min(p.exp, p.econ, p.safe) || 1;
+        const minHours = Math.min(dist / 85, dist / 40 + 12, dist / 55 + 2) || 1;
+        const minCo2 = Math.min(dist * 0.11, dist * 0.21, dist * 0.42) || 1;
+        const maxSafety = 9.8; // Max possible safety score
 
         return (
-          (weights.price / totalWeight) * (1 - price / maxPrice) +
-          (weights.time / totalWeight) * (1 - hours / maxHours) +
-          (weights.safety / totalWeight) * (safety / 10) +
-          (weights.eco / totalWeight) * (1 - co2 / maxCo2)
+          (weights.price / totalWeight) * (minPrice / price) +
+          (weights.time / totalWeight) * (minHours / hours) +
+          (weights.safety / totalWeight) * (safety / maxSafety) +
+          (weights.eco / totalWeight) * (minCo2 / co2)
         );
       };
 
@@ -360,20 +362,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       });
 
-      setCurrentCalculation({
+      const result = {
         ...currentCalculation,
         scenarios: updatedScenarios,
         recommended_scenario: [...updatedScenarios].sort((a, b) => b.saw_score - a.saw_score)[0].scenario
-      });
-      return;
+      };
+      setCurrentCalculation(result);
+      return result;
     }
 
     setIsCalculating(true);
     setError(null);
 
-    const runLocalCalculation = async () => {
-      const start: [number, number] = coords?.origin || [50.45, 30.52];
-      const end: [number, number] = coords?.dest || [49.83, 24.02];
+    const runLocalCalculation = async (): Promise<DeliveryCalculateResponse> => {
       const dist = Math.sqrt(Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2)) * 100;
       const p = getPrices(dist);
 
@@ -454,23 +455,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const finalScenarios = scenarios.map(sc => {
         const totalWeight = (weights.price + weights.time + weights.safety + weights.eco) || 1;
-        const maxPrice = Math.max(...scenarios.map(s => s.price)) || 1;
-        const maxHours = Math.max(...scenarios.map(s => s.duration_hours)) || 1;
-        const maxCo2 = Math.max(...scenarios.map(s => s.co2_footprint)) || 1;
+        const minPrice = Math.min(...scenarios.map(s => s.price)) || 1;
+        const minHours = Math.min(...scenarios.map(s => s.duration_hours)) || 1;
+        const minCo2 = Math.min(...scenarios.map(s => s.co2_footprint)) || 1;
+        const maxSafety = Math.max(...scenarios.map(s => s.safety_score)) || 1;
 
         return {
           ...sc,
           saw_score: Math.round((
-            (weights.price / totalWeight) * (1 - sc.price / maxPrice) +
-            (weights.time / totalWeight) * (1 - sc.duration_hours / maxHours) +
-            (weights.safety / totalWeight) * (sc.safety_score / 10) +
-            (weights.eco / totalWeight) * (1 - sc.co2_footprint / maxCo2)
+            (weights.price / totalWeight) * (minPrice / sc.price) +
+            (weights.time / totalWeight) * (minHours / sc.duration_hours) +
+            (weights.safety / totalWeight) * (sc.safety_score / maxSafety) +
+            (weights.eco / totalWeight) * (minCo2 / sc.co2_footprint)
           ) * 100) / 100
         };
       });
 
       const recommended = [...finalScenarios].sort((a, b) => b.saw_score - a.saw_score)[0].scenario;
-      setCurrentCalculation({ origin, destination: dest, scenarios: finalScenarios, recommended_scenario: recommended });
+      const result = { origin, destination: dest, scenarios: finalScenarios, recommended_scenario: recommended };
+      setCurrentCalculation(result);
+      return result;
     };
     try {
       const res = await fetch(`${API_URL}/api/deliveries/calculate`, {
@@ -479,6 +483,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify({
           origin_city: origin,
           destination_city: dest,
+          origin_lat: start[0],
+          origin_lng: start[1],
+          destination_lat: end[0],
+          destination_lng: end[1],
           cargo_type: cargoType,
           weight,
           declared_value: value,
@@ -493,14 +501,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (res.ok) {
         const data = await res.json();
         setCurrentCalculation(data);
+        return data;
       } else {
         // Бекенд недоступний або повернув помилку — використовуємо локальний SAW
         console.warn('API помилка розрахунку, перемикання на локальний SAW.');
-        await runLocalCalculation();
+        return await runLocalCalculation();
       }
     } catch (e) {
-      console.warn('Сервер недоступний. Використовуються локальні алгоритми МКВ.');
-      await runLocalCalculation();
+      console.warn('Сервер недоступний або сталася помилка. Використовуються локальні алгоритми МКВ.', e);
+      return await runLocalCalculation();
     } finally {
       setLoading(false);
       setIsCalculating(false);
@@ -581,7 +590,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
       setLoading(false);
-      return mockDel;
+      return { delivery: mockDel };
     }
   };
 

@@ -44,6 +44,16 @@ def get_all_vehicles(
     total = query.count()
     items = query.order_by(models.Vehicle.id.asc()).offset(skip).limit(limit).all()
     pages = math.ceil(total / limit) if limit > 0 else 0
+    
+    # Завантажуємо поточні доставки
+    for v in items:
+        if v.status == "In_Transit":
+            active_del = db.query(models.Delivery).filter(
+                models.Delivery.vehicle_id == v.id,
+                models.Delivery.status.in_(["Created", "Processing", "In_Transit", "Customs"])
+            ).first()
+            if active_del:
+                v.active_delivery = active_del
 
     return {
         "total": total,

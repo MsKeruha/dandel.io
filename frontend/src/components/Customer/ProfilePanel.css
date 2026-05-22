@@ -102,23 +102,24 @@
   display: block;
   margin-bottom: 6px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--dandel-meadow-light);
 }
 
 .profile-form .input-group input {
   width: 100%;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: white;
+  border: 1px solid rgba(26, 46, 32, 0.1);
   border-radius: 8px;
-  color: white;
+  color: var(--dandel-meadow-dark);
   transition: all 0.2s ease;
 }
 
 .profile-form .input-group input:focus {
-  border-color: var(--dandel-gold);
-  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--dandel-green);
+  background: white;
   outline: none;
+  box-shadow: 0 0 0 2px rgba(63, 143, 82, 0.1);
 }
 
 .profile-form .btn-accent {
@@ -142,10 +143,10 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  background: rgba(0, 0, 0, 0.2);
+  background: white;
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(26, 46, 32, 0.1);
 }
 
 .stat-info {
@@ -155,12 +156,12 @@
 
 .stat-info strong {
   font-size: 20px;
-  color: white;
+  color: var(--dandel-meadow-dark);
 }
 
 .stat-info span {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--dandel-meadow-light);
 }
 
 @media (max-width: 768px) {

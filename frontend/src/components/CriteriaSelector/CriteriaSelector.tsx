@@ -116,26 +116,17 @@ export const CriteriaSelector: React.FC = () => {
       const timer = setTimeout(() => {
         const parsedWeight = parseFloat(weight as string) || 0.1;
         const parsedValue = parseInt(value as string) || 100;
-        
-        const payload = {
-          origin_city: origin,
-          destination_city: destination,
-          origin_lat: originCoords[0],
-          origin_lng: originCoords[1],
-          destination_lat: destCoords[0],
-          destination_lng: destCoords[1],
-          cargo_type: cargoType,
-          weight: parsedWeight,
-          declared_value: parsedValue,
-          is_cross_border: isCrossBorder,
-          price_weight: priceWeight,
-          time_weight: timeWeight,
-          safety_weight: safetyWeight,
-          eco_weight: ecoWeight
-        };
 
-        calculateOptions(payload).then(result => {
-          setCurrentCalculation(result);
+        calculateDelivery(
+          origin,
+          destination,
+          cargoType,
+          parsedWeight,
+          parsedValue,
+          isCrossBorder,
+          { price: priceWeight, time: timeWeight, safety: safetyWeight, eco: ecoWeight },
+          { origin: originCoords, dest: destCoords }
+        ).then(result => {
           if (!selectedScenario && result) {
             setSelectedScenario(result.recommended_scenario);
           }
@@ -148,32 +139,26 @@ export const CriteriaSelector: React.FC = () => {
   // Окремий тригер для миттєвого перерахунку ціни (без очікування карти)
   useEffect(() => {
     if (currentCalculation) {
-      const parsedWeight = parseFloat(weight as string) || 0.1;
-      const parsedValue = parseInt(value as string) || 100;
-      
-      const payload = {
-        origin_city: origin,
-        destination_city: destination,
-        origin_lat: originCoords[0],
-        origin_lng: originCoords[1],
-        destination_lat: destCoords[0],
-        destination_lng: destCoords[1],
-        cargo_type: cargoType,
-        weight: parsedWeight,
-        declared_value: parsedValue,
-        is_cross_border: isCrossBorder,
-        price_weight: priceWeight,
-        time_weight: timeWeight,
-        safety_weight: safetyWeight,
-        eco_weight: ecoWeight
-      };
+      const timer = setTimeout(() => {
+        const parsedWeight = parseFloat(weight as string) || 0.1;
+        const parsedValue = parseInt(value as string) || 100;
 
-      calculateOptions(payload).then(result => {
-        setCurrentCalculation(result);
-        if (!selectedScenario && result) {
-          setSelectedScenario(result.recommended_scenario);
-        }
-      });
+        calculateDelivery(
+          origin,
+          destination,
+          cargoType,
+          parsedWeight,
+          parsedValue,
+          isCrossBorder,
+          { price: priceWeight, time: timeWeight, safety: safetyWeight, eco: ecoWeight },
+          { origin: originCoords, dest: destCoords }
+        ).then(result => {
+          if (!selectedScenario && result) {
+            setSelectedScenario(result.recommended_scenario);
+          }
+        });
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [cargoType, weight, value, isCrossBorder, priceWeight, timeWeight, safetyWeight, ecoWeight]);
 
@@ -222,6 +207,10 @@ export const CriteriaSelector: React.FC = () => {
       is_cross_border: isCrossBorder,
       origin_city: origin,
       destination_city: destination,
+      origin_lat: originCoords ? originCoords[0] : 50.4501,
+      origin_lng: originCoords ? originCoords[1] : 30.5234,
+      destination_lat: destCoords ? destCoords[0] : 49.8397,
+      destination_lng: destCoords ? destCoords[1] : 24.0297,
       sender_name: senderName,
       sender_address: senderAddress,
       receiver_name: receiverName,
@@ -570,7 +559,7 @@ export const CriteriaSelector: React.FC = () => {
 
                     <button 
                       className="btn-accent" 
-                      style={{ width: '100%', marginTop: '16px' }}
+                      style={{ width: '100%', marginTop: '16px', padding: '12px 0', fontSize: '1rem' }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedScenario(scen.scenario);

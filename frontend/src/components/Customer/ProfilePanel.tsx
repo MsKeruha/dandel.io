@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import Icon from '../common/Icon';
-import CustomerDeliveries from './CustomerDeliveries';
 import './ProfilePanel.css';
 
 export const ProfilePanel: React.FC = () => {
@@ -110,8 +109,6 @@ export const ProfilePanel: React.FC = () => {
           </div>
         </div>
       </div>
-      
-      <CustomerDeliveries />
     </div>
   );
 };

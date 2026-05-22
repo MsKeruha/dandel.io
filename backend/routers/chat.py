@@ -111,8 +111,11 @@ def admin_get_chats(
     
     chats = []
     for u in users_with_chats:
-        # Отримуємо останнє повідомлення для відображення
-        last_msg = db.query(ChatMessage).filter(ChatMessage.user_id == u.id).order_by(ChatMessage.created_at.desc()).first()
+        # Отримуємо останнє повідомлення клієнта для відображення
+        last_msg = db.query(ChatMessage).filter(
+            ChatMessage.user_id == u.id, 
+            ChatMessage.sender_type == "customer"
+        ).order_by(ChatMessage.created_at.desc()).first()
         
         # Перевіряємо чи є непрочитані повідомлення від клієнта
         unread_count = db.query(ChatMessage).filter(
@@ -127,7 +130,8 @@ def admin_get_chats(
             "email": u.email,
             "last_message": last_msg.content if last_msg else "",
             "last_message_date": last_msg.created_at if last_msg else None,
-            "unread": unread_count > 0
+            "unread": unread_count > 0,
+            "is_resolved": last_msg.is_resolved if last_msg else False
         })
         
     chats.sort(key=lambda x: x["last_message_date"], reverse=True)
@@ -179,3 +183,17 @@ def admin_send_message(
     db.refresh(support_msg)
     
     return support_msg
+
+@router.put("/admin/messages/{user_id}/resolve")
+def admin_resolve_chat(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Закрити чат (вирішити питання) шляхом маркування історії як вирішеної."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    db.query(ChatMessage).filter(ChatMessage.user_id == user_id).update({"is_resolved": True})
+    db.commit()
+    return {"status": "success", "message": "Chat resolved"}

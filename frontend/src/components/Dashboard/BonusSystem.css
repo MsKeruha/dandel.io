@@ -257,22 +257,22 @@
 .history-table th {
   padding: 0.75rem 1rem;
   font-weight: bold;
-  color: var(--dandel-meadow-light);
-  background: var(--dandel-puff);
+  color: var(--dandel-green);
+  background: var(--dandel-green-light);
   font-size: 0.75rem;
   text-transform: uppercase;
 }
 
 .history-table td {
   padding: 1rem;
-  border-bottom: 1px solid rgba(26, 46, 32, 0.05);
+  border-bottom: 1px solid rgba(63, 143, 82, 0.1);
   color: var(--dandel-meadow-dark);
 }
 
 .date-cell {
   white-space: nowrap;
   font-weight: 500;
-  color: var(--dandel-meadow-light);
+  color: var(--dandel-green);
 }
 
 .desc-cell {

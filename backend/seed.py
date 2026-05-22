@@ -184,16 +184,35 @@ def seed_data(reset=False):
         models_list = ["Mercedes Sprinter", "Renault Master", "Ford Transit", "MAN TGX", "Volvo FH", "Scania R450"]
         types_list = ["Фура", "Рефрижератор", "Міні-вен", "Електро-трак"]
         statuses = ["Available", "In_Transit", "Maintenance", "Offline"]
+        regions = ["AA", "KA", "AB", "KB", "AC", "KC", "AE", "KE", "AH", "KH", "AM", "KM", "AO", "KO", "AP", "KP", "AT", "KT", "BA", "HA", "BB", "HB", "BC", "HC", "BE", "HE", "BH", "HH", "BI", "HI", "BK", "HK", "BM", "HM", "BO", "HO", "AX", "KX", "BT", "HT", "BX", "HX", "CA", "IA", "CB", "IB", "CE", "IE", "CH", "IH"]
+        letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        
+        cities = list(CITIES_COORDS.keys())
         
         for i in range(141):
             v_type = random.choice(types_list)
             cap = 1500 if v_type == "Міні-вен" else (5000 if v_type == "Електро-трак" else 20000)
+            
+            # Generate realistic plate: [Region] [4 digits] [2 Letters]
+            reg = random.choice(regions)
+            nums = f"{random.randint(0, 9999):04d}"
+            sfx = random.choice(letters) + random.choice(letters)
+            plate = f"{reg} {nums} {sfx}"
+            
+            # Spread vehicles
+            city = random.choice(cities)
+            base_lat, base_lng = CITIES_COORDS[city]
+            v_lat = base_lat + random.uniform(-0.1, 0.1)
+            v_lng = base_lng + random.uniform(-0.1, 0.1)
+            
             v = models.Vehicle(
-                plate=f"AA{1000 + i:04d}BC",
+                plate=plate,
                 model=random.choice(models_list),
                 type=v_type,
                 capacity_kg=cap + random.randint(-500, 500),
-                status=random.choices(statuses, weights=[60, 30, 5, 5])[0]
+                status=random.choices(statuses, weights=[60, 30, 5, 5])[0],
+                current_lat=v_lat,
+                current_lng=v_lng
             )
             vehicles.append(v)
         
@@ -286,6 +305,7 @@ def seed_data(reset=False):
     ]
 
     all_seeded_deliveries = []
+    available_vehicles = db.query(models.Vehicle).all()
 
     # Додаємо демо-доставки
     if should_seed_deliveries:
@@ -315,7 +335,8 @@ def seed_data(reset=False):
                 bonuses_spent=dd["bonuses_spent"],
                 bonuses_earned=dd["bonuses_earned"],
                 photo_proof=dd["photo_proof"],
-                created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(1, 10))
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(1, 10)),
+                vehicle_id=random.choice(available_vehicles).id if available_vehicles else None
             )
             db.add(d)
             db.flush()
@@ -329,7 +350,7 @@ def seed_data(reset=False):
                 origin = random.choice(list(CITIES_COORDS.keys()))
                 dest = random.choice([c for c in list(CITIES_COORDS.keys()) if c != origin])
                 scenario = random.choice(["Експрес", "Економ", "Безпечний"])
-                status = random.choice(["Delivered", "Cancelled", "In_Transit"])
+                status = random.choice(["Delivered", "Cancelled", "In_Transit", "Processing", "Created"])
                 
                 is_cross = origin in ["Варшава", "Берлін", "Прага"] or dest in ["Варшава", "Берлін", "Прага"]
                 escort = scenario == "Безпечний" and random.choice([True, False])
@@ -375,9 +396,23 @@ def seed_data(reset=False):
                     co2_footprint=round(co2, 2),
                     bonuses_spent=0.0,
                     bonuses_earned=round(price * 0.05, 2),
-                    photo_proof=random.choice(PHOTO_PROOFS) if status == "Delivered" else None,
-                    created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(5, 45))
+                    photo_proof=random.choice(PHOTO_PROOFS) if status == "Delivered" else None
                 )
+                
+                # Корегуємо дату створення під поточний статус
+                now = datetime.datetime.utcnow()
+                if status == "Delivered":
+                    d.created_at = now - datetime.timedelta(days=random.randint(2, 45))
+                elif status == "Cancelled":
+                    d.created_at = now - datetime.timedelta(days=random.randint(1, 10))
+                elif status == "In_Transit":
+                    d.created_at = now - datetime.timedelta(hours=duration * random.uniform(0.3, 0.8))
+                elif status == "Processing":
+                    d.created_at = now - datetime.timedelta(hours=duration * random.uniform(0.1, 0.25))
+                else: # Created
+                    d.created_at = now - datetime.timedelta(hours=duration * random.uniform(0.01, 0.05))
+                    
+                d.vehicle_id = random.choice(available_vehicles).id if available_vehicles and status in ["In_Transit", "Processing", "Created"] else None
                 db.add(d)
                 db.flush()
                 all_seeded_deliveries.append(d)

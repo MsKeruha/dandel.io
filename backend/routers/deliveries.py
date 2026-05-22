@@ -2,6 +2,7 @@ import math
 import random
 import urllib.request
 import json
+import datetime
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
@@ -9,13 +10,39 @@ from sqlalchemy import or_
 from schemas import DeliveryCalculateRequest, DeliveryCalculateResponse, DeliveryCreate, DeliveryResponse, ScenarioDetails, RiskZoneResponse, DeliveryGuestResponse, Token, PaginatedResponse, AdminDeliveryResponse
 from routers.auth import get_current_user, get_optional_current_user, get_password_hash, create_access_token
 from database import get_db
-from models import User, RiskZone, Delivery, BonusTransaction
+from models import User, RiskZone, Delivery, BonusTransaction, Vehicle
 import string
 
 router = APIRouter(
     prefix="/api/deliveries",
     tags=["Deliveries & Calculations"]
 )
+
+def update_dynamic_statuses(db: Session):
+    deliveries = db.query(Delivery).filter(Delivery.status.notin_(['Delivered', 'Cancelled'])).all()
+    for deliv in deliveries:
+        if not deliv.created_at or not deliv.duration_hours:
+            continue
+            
+        now = datetime.datetime.utcnow()
+        elapsed = (now - deliv.created_at.replace(tzinfo=None)).total_seconds() / 3600.0
+        total_h = deliv.duration_hours
+        
+        if elapsed >= total_h:
+            deliv.status = 'Delivered'
+            # Звільняємо авто
+            if deliv.vehicle_id:
+                veh = db.query(Vehicle).filter(Vehicle.id == deliv.vehicle_id).first()
+                if veh:
+                    veh.status = 'Available'
+        elif elapsed >= total_h * 0.8 and deliv.is_cross_border:
+            deliv.status = 'Customs'
+        elif elapsed >= total_h * 0.3:
+            deliv.status = 'In_Transit'
+        elif elapsed >= total_h * 0.1:
+            deliv.status = 'Processing'
+    
+    db.commit()
 
 # Допоміжна функція для розрахунку відстані (формула Гаверсинуса)
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -32,15 +59,19 @@ def get_route_data(start: List[float], end: List[float], scenario: str):
     # Визначаємо проміжні точки для створення різних маршрутів
     waypoints = f"{start[1]},{start[0]}"
     
+    # Розрахунок дельти для пропорційного зміщення (перпендикуляр)
+    dlat = end[0] - start[0]
+    dlng = end[1] - start[1]
+    
     if scenario == "Економ":
-        # Зміщуємо маршрут для "Економ" (ніби через додаткові хаби)
-        mid_lat = (start[0] + end[0]) / 2 + 1.2
-        mid_lng = (start[1] + end[1]) / 2 - 0.8
+        # Економ іде з відхиленням для заїзду в хаби (широкий об'їзд)
+        mid_lat = (start[0] + end[0]) / 2 + dlng * 0.2
+        mid_lng = (start[1] + end[1]) / 2 - dlat * 0.2
         waypoints += f";{mid_lng},{mid_lat}"
     elif scenario == "Безпечний":
-        # Зміщуємо маршрут для "Безпечний" (оминаючи певні зони)
-        mid_lat = (start[0] + end[0]) / 2 - 1.0
-        mid_lng = (start[1] + end[1]) / 2 + 1.2
+        # Безпечний злегка об'їжджає в інший бік (уникаючи центральних небезпечних трас)
+        mid_lat = (start[0] + end[0]) / 2 - dlng * 0.15
+        mid_lng = (start[1] + end[1]) / 2 + dlat * 0.15
         waypoints += f";{mid_lng},{mid_lat}"
         
     waypoints += f";{end[1]},{end[0]}"
@@ -93,14 +124,14 @@ def calculate_options(req: DeliveryCalculateRequest):
     # ⚡ Експрес (Літак + кур'єр)
     express_dist = express_data["distance"]
     express_price = 500.0 + (express_dist * 18.0) + (req.weight * 40.0) + (req.declared_value * 0.01)
-    express_time = max(3.0, express_data["duration"] * 0.8)  # швидше звичайного авто
+    express_time = express_data["duration"] * 0.9 + 1.0  # найшвидше, + 1 год на обробку
     express_safety = 8.5
     express_eco = express_dist * 0.42 + (req.weight * 0.15)  # високий вуглецевий слід
     
     # 🌱 Економ (Збірний вантаж)
     econ_dist = econ_data["distance"]
     econ_price = 150.0 + (econ_dist * 4.5) + (req.weight * 12.0) + (req.declared_value * 0.005)
-    econ_time = econ_data["duration"] * 1.5 + 12.0  # збірні склади + довше їхати
+    econ_time = econ_data["duration"] * 1.5 + 12.0  # збірні склади (хаби) + повільніше їхати
     econ_safety = 7.0
     econ_eco = econ_dist * 0.11 + (req.weight * 0.03)  # екологічно
     
@@ -150,7 +181,7 @@ def calculate_options(req: DeliveryCalculateRequest):
     min_price = min(s["price"] for s in scenarios_raw.values())
     min_time = min(s["time"] for s in scenarios_raw.values())
     min_eco = min(s["eco"] for s in scenarios_raw.values())
-    max_safety = max(s["safety"] for s in scenarios_raw.values())
+    max_safety = 9.8
     
     # Сума ваг повинна дорівнювати 1
     # Робимо експоненційне посилення (щоб 100% швидкість дійсно домінувала)
@@ -246,13 +277,13 @@ def create_delivery(
         access_token = create_access_token(data={"sub": current_user.email})
         token_data = Token(access_token=access_token, token_type="bearer", user=current_user)
 
-    # Отримуємо маршрут для збереження координат (якщо потрібно)
-    # Зверніть увагу: ми більше не перевіряємо CITIES_COORDS
+    # Отримуємо маршрут для збереження координат
+    start_coords = [order_in.origin_lat, order_in.origin_lng]
+    end_coords = [order_in.destination_lat, order_in.destination_lng]
     
-    # Відстань рахуємо приблизно, бо у DeliveryCreate немає координат. 
-    # В реальному світі варто передавати координати і в DeliveryCreate, 
-    # але для демо беремо середню відстань 500 км якщо не можемо знайти через OSRM
-    distance = 500.0
+    distance = calculate_distance(start_coords[0], start_coords[1], end_coords[0], end_coords[1])
+    if distance < 1.0:
+        distance = 1.0
 
     # Спрощений підрахунок вартості
     if order_in.scenario == "Експрес":
@@ -325,10 +356,22 @@ def create_delivery(
     )
     db.add(tx_earn)
 
-    # Початкові координати на карті для руху
-    start_coords = CITIES_COORDS[order_in.origin_city]
+
 
     # Створюємо саму доставку
+    from models import Vehicle
+    
+    # Шукаємо вільну машину з достатньою вантажопідйомністю
+    vehicle = db.query(Vehicle).filter(
+        Vehicle.status == "Available",
+        Vehicle.capacity_kg >= order_in.weight
+    ).first()
+    
+    vehicle_id = None
+    if vehicle:
+        vehicle_id = vehicle.id
+        vehicle.status = "In_Transit"
+
     new_delivery = Delivery(
         sender_id=current_user.id,
         cargo_name=order_in.cargo_name,
@@ -338,20 +381,26 @@ def create_delivery(
         is_cross_border=order_in.is_cross_border,
         origin_city=order_in.origin_city,
         destination_city=order_in.destination_city,
+        origin_lat=order_in.origin_lat,
+        origin_lng=order_in.origin_lng,
+        destination_lat=order_in.destination_lat,
+        destination_lng=order_in.destination_lng,
         sender_name=order_in.sender_name,
         receiver_name=order_in.receiver_name,
         receiver_phone=order_in.receiver_phone,
         sender_address=order_in.sender_address,
-        receiver_address=order_in.receiver_address,
         scenario=order_in.scenario,
         escort_requested=order_in.escort_requested,
         status="Created",
-        price=round(final_price, 2),
-        duration_hours=round(time_h, 1),
+        current_lat=order_in.origin_lat,
+        current_lng=order_in.origin_lng,
+        price=final_price,
+        duration_hours=time_h,
         safety_score=safety,
-        co2_footprint=round(co2, 2),
-        bonuses_spent=round(bonuses_to_spend, 2),
-        bonuses_earned=round(bonuses_earned, 2)
+        co2_footprint=co2,
+        bonuses_spent=bonuses_to_spend,
+        bonuses_earned=bonuses_earned,
+        vehicle_id=vehicle_id
     )
     
     # Додаємо координати відправлення
@@ -383,6 +432,7 @@ def get_my_deliveries(
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
+    update_dynamic_statuses(db)
     return db.query(Delivery).filter(Delivery.sender_id == current_user.id).order_by(Delivery.created_at.desc()).all()
 
 
@@ -400,8 +450,8 @@ def simulate_delivery_step(
     if delivery.status == "Delivered":
         return delivery
         
-    start_c = CITIES_COORDS[delivery.origin_city]
-    end_c = CITIES_COORDS[delivery.destination_city]
+    start_c = [delivery.origin_lat, delivery.origin_lng]
+    end_c = [delivery.destination_lat, delivery.destination_lng]
 
     # Симулюємо зміну статусів: Created -> Processing -> In_Transit -> (Customs якщо кордон) -> Delivered
     status_flow = ["Created", "Processing", "In_Transit"]
@@ -475,6 +525,8 @@ def admin_get_all_deliveries(
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Доступ заборонено")
+        
+    update_dynamic_statuses(db)
     
     query = db.query(Delivery)
 
@@ -550,8 +602,8 @@ def admin_update_delivery_status(
         delivery.status = new_status
         
         # Симулюємо координати та фотозвіти
-        start_c = CITIES_COORDS[delivery.origin_city]
-        end_c = CITIES_COORDS[delivery.destination_city]
+        start_c = [delivery.origin_lat, delivery.origin_lng]
+        end_c = [delivery.destination_lat, delivery.destination_lng]
         
         status_flow = ["Created", "Processing", "In_Transit"]
         if delivery.is_cross_border:

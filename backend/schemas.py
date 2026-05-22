@@ -63,7 +63,7 @@ class ChatMessageResponse(ChatMessageBase):
     id: int
     user_id: int
     sender_type: str  # customer, support, system
-    is_read: bool = False
+    is_read: Optional[bool] = False
     created_at: datetime
 
     class Config:
@@ -116,6 +116,10 @@ class DeliveryCreate(BaseModel):
     is_cross_border: bool
     origin_city: str
     destination_city: str
+    origin_lat: float
+    origin_lng: float
+    destination_lat: float
+    destination_lng: float
     sender_name: str
     sender_address: str
     receiver_name: str
@@ -169,6 +173,10 @@ class AdminDeliveryResponse(BaseModel):
     is_cross_border: bool
     origin_city: str
     destination_city: str
+    origin_lat: float
+    origin_lng: float
+    destination_lat: float
+    destination_lng: float
     sender_name: str
     sender_address: Optional[str] = None
     receiver_name: str
@@ -219,11 +227,22 @@ class VehicleBase(BaseModel):
 class VehicleCreate(VehicleBase):
     pass
 
+class VehicleDeliveryResponse(BaseModel):
+    id: int
+    cargo_name: str
+    origin_city: str
+    destination_city: str
+    status: str
+    
+    class Config:
+        from_attributes = True
+
 class VehicleResponse(VehicleBase):
     id: int
     current_lat: Optional[float] = None
     current_lng: Optional[float] = None
     last_updated: datetime
+    active_delivery: Optional[VehicleDeliveryResponse] = None
 
     class Config:
         from_attributes = True

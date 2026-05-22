@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useOverlay } from '../../context/OverlayContext';
 import Icon from '../common/Icon';
+import CustomSelect from '../common/CustomSelect';
 import { AdminChatPanel } from './AdminChatPanel';
 import './AdminPanel.css';
 
@@ -27,6 +28,16 @@ interface AdminDelivery {
   bonuses_spent: number;
   bonuses_earned: number;
   created_at: string;
+  current_lat?: number;
+  current_lng?: number;
+  last_updated?: string;
+  active_delivery?: {
+    id: number;
+    cargo_name: string;
+    origin_city: string;
+    destination_city: string;
+    status: string;
+  };
 }
 
 interface AdminUser {
@@ -58,11 +69,17 @@ const Pagination = ({
     <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
       <div className="page-size-selector">
         <span className="muted-text" style={{marginRight: '10px'}}>Показувати по:</span>
-        <select value={pageSize} onChange={e => onPageSizeChange(Number(e.target.value))} className="status-filter-select" style={{width: '70px'}}>
-          <option value={10}>10</option>
-          <option value={20}>20</option>
-          <option value={50}>50</option>
-        </select>
+        <div style={{ width: '80px', display: 'inline-block', verticalAlign: 'middle' }}>
+          <CustomSelect 
+            value={pageSize.toString()} 
+            onChange={(val) => onPageSizeChange(Number(val))} 
+            options={[
+              { value: '10', label: '10' },
+              { value: '20', label: '20' },
+              { value: '50', label: '50' }
+            ]}
+          />
+        </div>
         <span className="muted-text" style={{marginLeft: '10px'}}>Всього: {totalItems}</span>
       </div>
       
@@ -310,8 +327,16 @@ export const AdminPanel: React.FC = () => {
       case 'In_Transit': return 'В дорозі';
       case 'Customs': return 'Митниця';
       case 'Delivered': return 'Доставлено';
+      case 'Cancelled':
+      case 'cancelled': return 'Скасовано';
       default: return status;
     }
+  };
+
+  const formatDateTime = (dateString?: string) => {
+    if (!dateString) return 'Невідомо';
+    const d = new Date(dateString);
+    return d.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -414,7 +439,7 @@ export const AdminPanel: React.FC = () => {
           <div className="glass-card table-wrapper fade-in">
             <div className="table-header-controls">
               <h4>Управління доставками</h4>
-              <div className="table-filters">
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                 <input
                   type="text"
                   placeholder="Пошук за ID, вантажем, містом..."
@@ -422,18 +447,20 @@ export const AdminPanel: React.FC = () => {
                   onChange={e => setDelSearch(e.target.value)}
                   className="search-input"
                 />
-                <select
-                  value={delStatus}
-                  onChange={e => { setDelStatus(e.target.value); setDelPage(1); }}
-                  className="status-filter-select"
-                >
-                  <option value="ALL">Всі статуси</option>
-                  <option value="Created">Створено</option>
-                  <option value="Processing">Оформлення</option>
-                  <option value="In_Transit">В дорозі</option>
-                  <option value="Customs">Митниця</option>
-                  <option value="Delivered">Доставлено</option>
-                </select>
+                <div style={{ width: '180px' }}>
+                  <CustomSelect
+                    value={delStatus}
+                    onChange={(val) => { setDelStatus(val); setDelPage(1); }}
+                    options={[
+                      { value: 'ALL', label: 'Всі статуси' },
+                      { value: 'Created', label: 'Створено' },
+                      { value: 'Processing', label: 'Оформлення' },
+                      { value: 'In_Transit', label: 'В дорозі' },
+                      { value: 'Customs', label: 'Митниця' },
+                      { value: 'Delivered', label: 'Доставлено' }
+                    ]}
+                  />
+                </div>
               </div>
             </div>
 
@@ -447,6 +474,7 @@ export const AdminPanel: React.FC = () => {
                     <th>Маршрут</th>
                     <th>Отримувач</th>
                     <th>Ціна</th>
+                    <th>Терміни</th>
                     <th>Статус</th>
                     <th>Змінити статус</th>
                   </tr>
@@ -463,7 +491,7 @@ export const AdminPanel: React.FC = () => {
                       <td>{del.sender_name}</td>
                       <td>
                         {del.origin_city} → {del.destination_city}
-                        {del.is_cross_border && <span className="badge-cross-border">🌍 Міжнар.</span>}
+                        {del.is_cross_border && <span className="badge-cross-border"><Icon name="globe" size={14} /> Міжнар.</span>}
                       </td>
                       <td>
                         {del.receiver_name}
@@ -471,29 +499,35 @@ export const AdminPanel: React.FC = () => {
                         <small className="muted-text">{del.receiver_phone}</small>
                       </td>
                       <td className="bold-text highlight-gold">{del.price} грн</td>
+                      <td style={{ fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                        <div><strong style={{ color: '#666' }}>Прийнято:</strong><br />{formatDateTime(del.created_at)}</div>
+                        <div style={{ marginTop: '4px' }}><strong style={{ color: '#666' }}>Очікується:</strong><br />{formatDateTime(new Date(new Date(del.created_at || Date.now()).getTime() + (del.duration_hours || 24) * 60 * 60 * 1000).toISOString())}</div>
+                      </td>
                       <td>
-                        <span className={`status-pill ${del.status}`}>
+                        <span className={`status-pill ${del.status.toLowerCase()}`}>
                           {getStatusLabelText(del.status)}
                         </span>
                       </td>
                       <td>
-                        <select
-                          value={del.status}
-                          onChange={e => handleStatusChange(del.id, e.target.value)}
-                          className="table-action-select"
-                        >
-                          <option value="Created">Створено</option>
-                          <option value="Processing">Оформлення</option>
-                          <option value="In_Transit">В дорозі</option>
-                          <option value="Customs">Митниця</option>
-                          <option value="Delivered">Доставлено</option>
-                        </select>
+                        <div style={{ width: '150px' }}>
+                          <CustomSelect
+                            value={del.status}
+                            onChange={(val) => handleStatusChange(del.id, val)}
+                            options={[
+                              { value: 'Created', label: 'Створено' },
+                              { value: 'Processing', label: 'Оформлення' },
+                              { value: 'In_Transit', label: 'В дорозі' },
+                              { value: 'Customs', label: 'Митниця' },
+                              { value: 'Delivered', label: 'Доставлено' }
+                            ]}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))}
                   {deliveries.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="empty-table-row">{loading ? 'Завантаження...' : 'Доставок не знайдено.'}</td>
+                      <td colSpan={9} className="empty-table-row">{loading ? 'Завантаження...' : 'Доставок не знайдено.'}</td>
                     </tr>
                   )}
                 </tbody>
@@ -518,7 +552,7 @@ export const AdminPanel: React.FC = () => {
           <div className="glass-card table-wrapper fade-in">
             <div className="table-header-controls">
               <h4>Реєстр зареєстрованих клієнтів</h4>
-              <div className="table-filters">
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                 <input
                   type="text"
                   placeholder="Пошук за ID, ПІБ, Email..."
@@ -526,16 +560,18 @@ export const AdminPanel: React.FC = () => {
                   onChange={e => setUsrSearch(e.target.value)}
                   className="search-input"
                 />
-                <select
-                  value={usrRole}
-                  onChange={e => { setUsrRole(e.target.value); setUsrPage(1); }}
-                  className="status-filter-select"
-                >
-                  <option value="ALL">Всі ролі</option>
-                  <option value="customer">Клієнт</option>
-                  <option value="admin">Адміністратор</option>
-                  <option value="driver">Водій</option>
-                </select>
+                <div style={{ width: '180px' }}>
+                  <CustomSelect
+                    value={usrRole}
+                    onChange={(val) => { setUsrRole(val); setUsrPage(1); }}
+                    options={[
+                      { value: 'ALL', label: 'Всі ролі' },
+                      { value: 'customer', label: 'Клієнт' },
+                      { value: 'admin', label: 'Адміністратор' },
+                      { value: 'driver', label: 'Водій' }
+                    ]}
+                  />
+                </div>
               </div>
             </div>
 
@@ -631,16 +667,16 @@ export const AdminPanel: React.FC = () => {
                   </div>
                   <div className="input-group">
                     <label>Тип транспорту</label>
-                    <select 
-                      className="status-filter-select"
+                    <CustomSelect 
                       value={newVehicle.type}
-                      onChange={e => setNewVehicle({...newVehicle, type: e.target.value})}
-                    >
-                      <option value="Фура">Фура (20т+)</option>
-                      <option value="Рефрижератор">Рефрижератор</option>
-                      <option value="Міні-вен">Міні-вен</option>
-                      <option value="Електро-трак">Електро-трак</option>
-                    </select>
+                      onChange={(val) => setNewVehicle({...newVehicle, type: val})}
+                      options={[
+                        { value: 'Фура', label: 'Фура (20т+)' },
+                        { value: 'Рефрижератор', label: 'Рефрижератор' },
+                        { value: 'Міні-вен', label: 'Міні-вен' },
+                        { value: 'Електро-трак', label: 'Електро-трак' }
+                      ]}
+                    />
                   </div>
                   <div className="input-group">
                     <label>Вантажність (кг)</label>
@@ -662,7 +698,7 @@ export const AdminPanel: React.FC = () => {
             <div className="glass-card table-wrapper">
               <div className="table-header-controls">
                 <h4>Активний автопарк dandel.io</h4>
-                <div className="table-filters">
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                   <input
                     type="text"
                     placeholder="Пошук авто..."
@@ -693,8 +729,16 @@ export const AdminPanel: React.FC = () => {
                         <td>{v.capacity_kg / 1000} т</td>
                         <td>
                           <span className={`status-pill ${v.status}`}>
-                            {v.status === 'Available' ? 'Доступний' : v.status}
+                            {v.status === 'Available' ? 'Доступний' : 
+                             v.status === 'In_Transit' ? 'В дорозі' : 
+                             v.status === 'Maintenance' ? 'ТО' : 
+                             v.status === 'Offline' ? 'Не в мережі' : v.status}
                           </span>
+                          {v.active_delivery && (
+                            <div style={{ fontSize: '0.75rem', marginTop: '4px', color: '#666' }}>
+                              <Icon name="package" size={12} /> {v.active_delivery.cargo_name} ({v.active_delivery.origin_city} - {v.active_delivery.destination_city})
+                            </div>
+                          )}
                         </td>
                         <td>
                           <button 

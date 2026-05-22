@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import Icon from '../common/Icon';
 import '../Chat/SupportChat.css'; // Reusing some chat styles
+import { useOverlay } from '../../context/OverlayContext';
 
 interface AdminChatUser {
   user_id: number;
@@ -10,6 +11,7 @@ interface AdminChatUser {
   last_message: string;
   last_message_date: string;
   unread: boolean;
+  is_resolved: boolean;
 }
 
 interface ChatMessage {
@@ -22,8 +24,10 @@ interface ChatMessage {
 
 export const AdminChatPanel: React.FC = () => {
   const { token } = useApp();
+  const { showConfirm } = useOverlay();
   const [chats, setChats] = useState<AdminChatUser[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [chatFilter, setChatFilter] = useState<'active' | 'resolved'>('active');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -115,6 +119,28 @@ export const AdminChatPanel: React.FC = () => {
     }
   };
 
+  const handleResolveChat = async () => {
+    if (!selectedUserId || !token) return;
+    if (!(await showConfirm("Ви впевнені, що хочете закрити чат? Він буде переміщений в історію."))) return;
+    
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/chat/admin/messages/${selectedUserId}/resolve`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setSelectedUserId(null);
+        setMessages([]);
+        fetchChats();
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const formatTime = (isoString: string) => {
     try {
       const date = new Date(isoString);
@@ -125,14 +151,28 @@ export const AdminChatPanel: React.FC = () => {
   };
 
   const selectedUser = chats.find(c => c.user_id === selectedUserId);
+  const filteredChats = chats.filter(c => chatFilter === 'active' ? !c.is_resolved : c.is_resolved);
 
   return (
     <div className="glass-card fade-in" style={{ padding: '1rem', height: '600px', display: 'flex', gap: '1rem' }}>
       {/* Список чатів */}
       <div style={{ width: '300px', borderRight: '1px solid rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
-        <h4 style={{ padding: '0.5rem', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>Активні чати</h4>
+        <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,0.1)' }}>
+          <button 
+            style={{ flex: 1, padding: '0.75rem', background: chatFilter === 'active' ? 'white' : 'transparent', border: 'none', fontWeight: chatFilter === 'active' ? 'bold' : 'normal', borderBottom: chatFilter === 'active' ? '2px solid var(--dandel-green)' : '2px solid transparent', cursor: 'pointer' }}
+            onClick={() => setChatFilter('active')}
+          >
+            Активні
+          </button>
+          <button 
+            style={{ flex: 1, padding: '0.75rem', background: chatFilter === 'resolved' ? 'white' : 'transparent', border: 'none', fontWeight: chatFilter === 'resolved' ? 'bold' : 'normal', borderBottom: chatFilter === 'resolved' ? '2px solid var(--dandel-green)' : '2px solid transparent', cursor: 'pointer' }}
+            onClick={() => setChatFilter('resolved')}
+          >
+            Історія
+          </button>
+        </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {chats.map(chat => (
+          {filteredChats.map(chat => (
             <div 
               key={chat.user_id} 
               onClick={() => setSelectedUserId(chat.user_id)}
@@ -155,8 +195,8 @@ export const AdminChatPanel: React.FC = () => {
               </div>
             </div>
           ))}
-          {chats.length === 0 && (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Немає активних чатів</div>
+          {filteredChats.length === 0 && (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Немає чатів</div>
           )}
         </div>
       </div>
@@ -165,11 +205,23 @@ export const AdminChatPanel: React.FC = () => {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'white', borderRadius: '8px' }}>
         {selectedUserId ? (
           <>
-            <div style={{ padding: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)', background: '#f8f9fa', borderRadius: '8px 8px 0 0' }}>
-              <strong>Клієнт: {selectedUser?.full_name}</strong> ({selectedUser?.email})
+            <div style={{ padding: '1rem', borderBottom: '1px solid rgba(0,0,0,0.1)', background: '#f8f9fa', borderRadius: '8px 8px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <strong>Клієнт: {selectedUser?.full_name}</strong> ({selectedUser?.email})
+                {selectedUser?.is_resolved && <span style={{ marginLeft: '10px', fontSize: '0.75rem', background: '#ccc', padding: '2px 6px', borderRadius: '4px' }}>Закрито</span>}
+              </div>
+              {!selectedUser?.is_resolved && (
+                <button 
+                  className="btn-secondary" 
+                  onClick={handleResolveChat}
+                  disabled={loading}
+                style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem', color: 'var(--dandel-danger-text)' }}>
+                  <Icon name="check-circle" size={14} /> Маркувати як вирішене
+                </button>
+              )}
             </div>
             
-            <div className="messages-window" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div className="support-chat-messages" style={{ height: 'auto', flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {messages.map((msg) => {
                 const isMe = msg.sender_type === 'support';
                 return (
@@ -191,18 +243,18 @@ export const AdminChatPanel: React.FC = () => {
               <div ref={messagesEndRef} />
             </div>
 
-            <form className="chat-input-row" onSubmit={handleSendMessage} style={{ padding: '1rem', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
-              <input
-                type="text"
-                placeholder="Відповісти клієнту..."
+            <form onSubmit={handleSendMessage} className="support-chat-input-area" style={{ background: '#f8f9fa', padding: '1rem', borderTop: '1px solid rgba(0,0,0,0.1)' }}>
+              <input 
+                type="text" 
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                disabled={loading}
+                placeholder="Введіть відповідь..."
+                className="chat-input"
+                disabled={loading || selectedUser?.is_resolved}
                 style={{ flex: 1, padding: '0.8rem', borderRadius: '4px', border: '1px solid #ddd' }}
               />
-              <button type="submit" className="btn-accent send-chat-btn" disabled={loading} style={{ padding: '0 1.5rem' }}>
+              <button type="submit" className="chat-send-btn" disabled={!inputText.trim() || loading || selectedUser?.is_resolved} style={{ padding: '0 1.5rem' }}>
                 <Icon name="send" size={18} />
-                <span>Надіслати</span>
               </button>
             </form>
           </>

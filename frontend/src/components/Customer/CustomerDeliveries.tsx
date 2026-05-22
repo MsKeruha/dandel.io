@@ -9,6 +9,52 @@ export const CustomerDeliveries: React.FC = () => {
 
   const trackedDelivery = myDeliveries.find(d => d.id === trackedDeliveryId);
 
+  const getDynamicStatus = (del: any) => {
+    if (del.status?.toLowerCase() === 'cancelled') return 'Cancelled';
+    
+    const created = new Date(del.created_at || Date.now()).getTime();
+    const now = Date.now();
+    const elapsedHours = (now - created) / (1000 * 60 * 60);
+    const totalHours = del.duration_hours || 24;
+    
+    if (elapsedHours >= totalHours) return 'Delivered';
+    if (elapsedHours >= totalHours * 0.8 && del.is_cross_border) return 'Customs';
+    if (elapsedHours >= totalHours * 0.3) return 'In_Transit';
+    if (elapsedHours >= totalHours * 0.1) return 'Processing';
+    return 'Created';
+  };
+
+  const getDynamicLocation = (del: any) => {
+    if (del.status?.toLowerCase() === 'cancelled') return null;
+    const status = getDynamicStatus(del);
+    if (status === 'Delivered') return del.route_points?.[del.route_points.length - 1] || null;
+    
+    const created = new Date(del.created_at || Date.now()).getTime();
+    const now = Date.now();
+    const elapsedHours = (now - created) / (1000 * 60 * 60);
+    const totalHours = del.duration_hours || 24;
+    
+    const progress = Math.min(Math.max(elapsedHours / totalHours, 0), 1);
+    
+    if (progress === 0 || !del.route_points || del.route_points.length < 2) return null;
+    
+    const points = del.route_points;
+    const totalSegments = points.length - 1;
+    const exactIndex = progress * totalSegments;
+    const floorIndex = Math.floor(exactIndex);
+    const remainder = exactIndex - floorIndex;
+    
+    if (floorIndex >= totalSegments) return points[totalSegments];
+    
+    const p1 = points[floorIndex];
+    const p2 = points[floorIndex + 1];
+    
+    return [
+      p1[0] + (p2[0] - p1[0]) * remainder,
+      p1[1] + (p2[1] - p1[1]) * remainder
+    ];
+  };
+
   const getStatusLabel = (status: string) => {
     const map: Record<string, string> = {
       'Created': 'Створено',
@@ -16,9 +62,16 @@ export const CustomerDeliveries: React.FC = () => {
       'In_Transit': 'В дорозі',
       'Customs': 'Митний контроль',
       'Delivered': 'Доставлено',
-      'Cancelled': 'Скасовано'
+      'Cancelled': 'Скасовано',
+      'cancelled': 'Скасовано'
     };
     return map[status] || status;
+  };
+
+  const formatDateTime = (dateString?: string) => {
+    if (!dateString) return 'Невідомо';
+    const d = new Date(dateString);
+    return d.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   const getStatusProgress = (status: string) => {
@@ -33,9 +86,7 @@ export const CustomerDeliveries: React.FC = () => {
     return map[status] || 0;
   };
 
-  const handleSimulate = async (id: number) => {
-    await simulateStep(id);
-  };
+
 
   if (myDeliveries.length === 0) {
     return (
@@ -52,7 +103,9 @@ export const CustomerDeliveries: React.FC = () => {
       <div className="deliveries-sidebar">
         <h4 className="sidebar-title">Мої відправлення</h4>
         <div className="deliveries-list">
-          {myDeliveries.map((del) => (
+          {myDeliveries.map((del) => {
+            const dynamicStatus = getDynamicStatus(del);
+            return (
             <div 
               key={del.id}
               className={`delivery-item-card glass-card ${trackedDelivery?.id === del.id ? 'active' : ''}`}
@@ -63,8 +116,8 @@ export const CustomerDeliveries: React.FC = () => {
                   <Icon name={del.scenario === 'Експрес' ? 'zap' : del.scenario === 'Економ' ? 'leaf' : 'shield'} size={14} />
                 </span>
                 <strong>№{del.id}</strong>
-                <span className={`item-status-pill ${del.status}`}>
-                  {getStatusLabel(del.status)}
+                <span className={`item-status-pill ${dynamicStatus}`}>
+                  {getStatusLabel(dynamicStatus)}
                 </span>
               </div>
               
@@ -79,7 +132,8 @@ export const CustomerDeliveries: React.FC = () => {
                 <span>{del.weight} кг</span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -90,17 +144,11 @@ export const CustomerDeliveries: React.FC = () => {
               <div>
                 <h3>Карта відстеження вантажу №{trackedDelivery.id}</h3>
                 <p>Тариф: «{trackedDelivery.scenario}» | Вантаж: {trackedDelivery.cargo_name}</p>
+                <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#666', display: 'flex', gap: '2rem' }}>
+                  <span><Icon name="calendar" size={14} /> <strong>Прийнято:</strong> {formatDateTime(trackedDelivery.created_at)}</span>
+                  <span><Icon name="clock" size={14} /> <strong>Очікується:</strong> {formatDateTime(new Date(new Date(trackedDelivery.created_at || Date.now()).getTime() + (trackedDelivery.duration_hours || 24) * 60 * 60 * 1000).toISOString())}</span>
+                </div>
               </div>
-              
-              {trackedDelivery.status !== 'Delivered' && (
-                <button 
-                  className="btn-primary simulate-btn"
-                  onClick={() => handleSimulate(trackedDelivery.id)}
-                >
-                  <Icon name="play" size={16} />
-                  <span>Симулювати крок доставки</span>
-                </button>
-              )}
             </div>
 
             <RouteMap 
@@ -112,60 +160,32 @@ export const CustomerDeliveries: React.FC = () => {
                   : [[50.4501, 30.5234], [49.8397, 24.0297]]
               }
               scenario={trackedDelivery.scenario}
-              currentLocation={
-                trackedDelivery.current_lat && trackedDelivery.current_lng
-                  ? [trackedDelivery.current_lat, trackedDelivery.current_lng]
-                  : null
-              }
-              status={getStatusLabel(trackedDelivery.status)}
+              currentLocation={getDynamicLocation(trackedDelivery)}
+              status={getStatusLabel(getDynamicStatus(trackedDelivery))}
             />
 
             <div className="execution-timeline">
               <div className="timeline-header">
                 <h5>Етапи доставки вантажу:</h5>
-                <span className="percentage-completion">{getStatusProgress(trackedDelivery.status)}%</span>
+                <span className="percentage-completion">{getStatusProgress(getDynamicStatus(trackedDelivery))}%</span>
               </div>
 
               <div className="timeline-bar-wrapper">
                 <div 
                   className="timeline-bar-fill"
-                  style={{ width: `${getStatusProgress(trackedDelivery.status)}%` }}
+                  style={{ width: `${getStatusProgress(getDynamicStatus(trackedDelivery))}%` }}
                 ></div>
               </div>
 
               <div className="timeline-points">
-                <span className={`point-label ${trackedDelivery.status === 'Created' ? 'active' : ''}`}>Створено</span>
-                <span className={`point-label ${trackedDelivery.status === 'Processing' ? 'active' : ''}`}>Склад</span>
-                <span className={`point-label ${trackedDelivery.status === 'In_Transit' ? 'active' : ''}`}>В дорозі</span>
+                <span className={`point-label ${getDynamicStatus(trackedDelivery) === 'Created' ? 'active' : ''}`}>Створено</span>
+                <span className={`point-label ${getDynamicStatus(trackedDelivery) === 'Processing' ? 'active' : ''}`}>Склад</span>
+                <span className={`point-label ${getDynamicStatus(trackedDelivery) === 'In_Transit' ? 'active' : ''}`}>В дорозі</span>
                 {trackedDelivery.is_cross_border && (
-                  <span className={`point-label ${trackedDelivery.status === 'Customs' ? 'active' : ''}`}>Митниця</span>
+                  <span className={`point-label ${getDynamicStatus(trackedDelivery) === 'Customs' ? 'active' : ''}`}>Митниця</span>
                 )}
-                <span className={`point-label ${trackedDelivery.status === 'Delivered' ? 'active' : ''}`}>Доставлено</span>
+                <span className={`point-label ${getDynamicStatus(trackedDelivery) === 'Delivered' ? 'active' : ''}`}>Доставлено</span>
               </div>
-            </div>
-
-            <div className="checkpoint-photo-section">
-              <div className="section-title">
-                <Icon name="camera" size={18} color="var(--dandel-green)" />
-                <h4>Фотоконтроль безпеки вантажу dandel.io</h4>
-              </div>
-              
-              {trackedDelivery.photo_proof ? (
-                <div className="checkpoint-photo-card">
-                  <img src={trackedDelivery.photo_proof} alt="Cargo Checkpoint" className="checkpoint-img" />
-                  <div className="checkpoint-photo-details">
-                    <span className="photo-badge">Живе фото з блокпосту / складу</span>
-                    <p>Наш водій зробив знімок під час проходження точки контролю безпеки на маршруті «{trackedDelivery.origin_city} ➔ {trackedDelivery.destination_city}».</p>
-                    <div className="driver-meta">
-                      <strong>Водій:</strong> Олександр Вітер (Авто: Рено Трафік)
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="checkpoint-photo-empty">
-                  <p>Фотоконтроль з'явиться під час переміщення вантажівки в дорозі (натисніть кнопку "Симулювати крок доставки").</p>
-                </div>
-              )}
             </div>
           </div>
         ) : (

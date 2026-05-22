@@ -9,6 +9,7 @@ import SupportChat from './components/Chat/SupportChat';
 import BonusSystem from './components/Dashboard/BonusSystem';
 import RouteMap from './components/Map/RouteMap';
 import AdminPanel from './components/Admin/AdminPanel';
+import CustomerDeliveries from './components/Customer/CustomerDeliveries';
 import './App.css';
 
 const DashboardContent: React.FC = () => {
@@ -43,7 +44,7 @@ const DashboardContent: React.FC = () => {
   const [stats, setStats] = useState({ vehicle_count: 142, on_time_percentage: 99.8, cashback_percentage: 5 });
 
   useEffect(() => {
-    fetch('http://localhost:8000/api/stats')
+    fetch('/api/stats')
       .then(r => r.json())
       .then(d => setStats(d))
       .catch(e => console.warn('Stats fetch failed', e));
@@ -193,7 +194,7 @@ const DashboardContent: React.FC = () => {
       )}
 
       {/* Летюче насіння на фоні */}
-      <div className="dandelion-seeds-bg">
+      <div className={`dandelion-seeds-bg ${showLogin || showDeliveryModal ? 'paused' : ''}`}>
         <div className="seed" style={{ top: '20%', left: '-5%', animationDelay: '0s' }}></div>
         <div className="seed" style={{ top: '50%', left: '-5%', animationDelay: '4s', animationDuration: '24s' }}></div>
         <div className="seed" style={{ top: '80%', left: '-5%', animationDelay: '8s', animationDuration: '18s' }}></div>
@@ -209,51 +210,44 @@ const DashboardContent: React.FC = () => {
           </div>
         </div>
 
+        {/* Оформити доставку (Окрема кнопка) */}
+        <button 
+          className="btn-accent" 
+          onClick={() => setShowDeliveryModal(true)}
+          style={{ padding: '0.6rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap', borderRadius: 'calc(var(--radius-md) - 0.25rem)', marginLeft: 'auto', marginRight: '0.5rem' }}
+        >
+          <Icon name="plus-circle" size={16} /> Оформити доставку
+        </button>
+
         {/* Навігаційне меню */}
         <nav className="navbar-tabs">
           <button
             className={`tab-link ${activeTab === 'home' ? 'active' : ''}`}
             onClick={() => setActiveTab('home')}
           >
-            <Icon name="home" size={16} />
-            <span>Головна</span>
+            <Icon name="home" size={16} /> Головна
           </button>
+          
           <button
-            className="tab-link action-btn"
-            onClick={() => setShowDeliveryModal(true)}
-            style={{ background: 'rgba(255,199,44,0.1)', color: 'var(--dandel-gold)' }}
+            className={`tab-link ${activeTab === 'profile' || activeTab === 'deliveries' ? 'active' : ''}`}
+            onClick={() => handleProtectedTab('deliveries')}
           >
-            <Icon name="plus-circle" size={16} />
-            <span>Оформити доставку</span>
+            <Icon name="package" size={16} /> Доставки
           </button>
-          <button
-            className={`tab-link ${activeTab === 'profile' ? 'active' : ''}`}
-            onClick={() => handleProtectedTab('profile')}
-          >
-            <Icon name="user" size={16} />
-            <span>Профіль та Доставки</span>
-          </button>
-          <button
-            className={`tab-link ${activeTab === 'bonuses' ? 'active' : ''}`}
-            onClick={() => handleProtectedTab('bonuses')}
-          >
-            <Icon name="gift" size={16} />
-            <span>Кабінет Бонусів</span>
-          </button>
+          
           <button
             className={`tab-link ${activeTab === 'chat' ? 'active' : ''}`}
             onClick={() => handleProtectedTab('chat')}
           >
-            <Icon name="message-square" size={16} />
-            <span>Чат Підтримки</span>
+            <Icon name="message-square" size={16} /> Підтримка
           </button>
+          
           {user?.role === 'admin' && (
             <button
               className={`tab-link ${activeTab === 'admin' ? 'active' : ''}`}
               onClick={() => setActiveTab('admin')}
             >
-              <Icon name="settings" size={16} />
-              <span>Адміністрування</span>
+              <Icon name="settings" size={16} /> Адмін-панель
             </button>
           )}
         </nav>
@@ -261,22 +255,36 @@ const DashboardContent: React.FC = () => {
         {/* Профіль користувача або кнопка входу */}
         <div className="navbar-user-area">
           {token && user ? (
-            <div className="user-profile-badge">
-              {user.avatar_url ? (
-                <img src={user.avatar_url} alt="Аватар" style={{ width: 32, height: 32, borderRadius: '50%', objectFit: 'cover' }} />
-              ) : (
-                <Icon name="user" size={20} color="var(--dandel-gold)" />
-              )}
-              <span>{user.full_name.split(' ')[0]}</span>
-              <button
-                className="btn-logout"
-                onClick={logout}
-                title="Вийти з акаунту"
-                style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', marginLeft: '10px' }}
+            <>
+              <div
+                className="user-profile-badge"
+                onClick={() => setActiveTab('profile')}
+                title="Відкрити налаштування профілю"
               >
-                <Icon name="log-out" size={18} />
+                <div className="user-info-text">
+                  <strong>{user.full_name.split(' ')[0]}</strong>
+                  <span className="user-loyalty-label">{user.loyalty_level}</span>
+                </div>
+                <Icon name="user" size={18} color="var(--dandel-green)" />
+              </div>
+
+              <button
+                className="user-bonuses-pill"
+                onClick={() => setActiveTab('bonuses')}
+                title="Ваш баланс бонусів"
+              >
+                <Icon name="gift" size={14} /> {user.bonuses_balance}
               </button>
-            </div>
+
+              <button
+                className="logout-btn"
+                onClick={logout}
+                title="Вийти з акаунта"
+                style={{ flexShrink: 0 }}
+              >
+                <Icon name="log-out" size={16} />
+              </button>
+            </>
           ) : (
             <button className="btn-accent" onClick={() => setShowLogin(true)} style={{ padding: '8px 16px', fontSize: '14px' }}>
               <Icon name="user" size={16} />
@@ -300,7 +308,7 @@ const DashboardContent: React.FC = () => {
                 <div style={{ marginTop: '2rem' }}>
                   <CriteriaSelector />
                 </div>
-                
+
                 <div className="hero-stats-row" style={{ marginTop: '4rem' }}>
                   <div className="hero-stat-card">
                     <h3>{stats.vehicle_count} <Icon name="truck" size={16} /></h3>
@@ -324,10 +332,11 @@ const DashboardContent: React.FC = () => {
           </>
         )}
 
-        {/* === Вкладка "Профіль та Доставки" === */}
-        {activeTab === 'profile' && (
-          <ProfilePanel />
-        )}
+        {/* === Вкладка "Профіль" === */}
+        {activeTab === 'profile' && <ProfilePanel />}
+        
+        {/* === Вкладка "Мої відправлення" === */}
+        {activeTab === 'deliveries' && <CustomerDeliveries />}
 
         {activeTab === 'bonuses' && <BonusSystem />}
 
@@ -339,7 +348,6 @@ const DashboardContent: React.FC = () => {
       {/* Футер */}
       <footer className="main-footer">
         <p>© 2026 dandel.io — Інтелектуальна веборієнтована логістична платформа. Всі права захищені.</p>
-        <p>Розроблено на тему: "Розроблення веборієнтованої системи для транскордонних та внутрішніх перевезеннь з мультикритеріальним вибором сценаріїв доставки"</p>
       </footer>
 
       {/* Модальне вікно створення доставки */}

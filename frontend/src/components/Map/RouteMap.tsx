@@ -81,7 +81,7 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
     if (riskCircleRef.current) map.removeLayer(riskCircleRef.current);
 
     // Спочатку малюємо всі інші маршрути як фонові (дуже тонкими та прозорими)
-    if (allScenarios) {
+    if (!isCalculating && allScenarios) {
       allScenarios.forEach(sc => {
         if (sc.scenario !== scenario && sc.route_points && sc.route_points.length >= 2) {
           const pts = sc.route_points.map((p: any) => [p[0], p[1]]);
@@ -96,7 +96,7 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
       });
     }
 
-    if (routePoints && routePoints.length >= 2) {
+    if (!isCalculating && routePoints && routePoints.length >= 2) {
       const latLngs = routePoints.map(p => [p[0], p[1]]);
       const color = getScenarioColor(scenario);
 
@@ -233,7 +233,7 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
               )}
 
               {/* Маршрутна лінія */}
-              {routePoints && routePoints.length >= 2 && (
+              {!isCalculating && routePoints && routePoints.length >= 2 && (
                 <g>
                   <path 
                     d={scenario === 'Експрес' 

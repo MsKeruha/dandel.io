@@ -79,6 +79,7 @@ def get_lerp_coords(start_city, end_city, progress):
     return lat, lng
 
 def seed_data(reset=False):
+    models.Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     
     if reset:
@@ -88,89 +89,128 @@ def seed_data(reset=False):
         db.query(models.Delivery).delete()
         db.query(models.User).delete()
         db.query(models.LoyaltyLevel).delete()
+        db.query(models.RiskZone).delete()
         db.commit()
-    elif db.query(models.User).first():
-        print("ℹ️ База даних вже містить дані. Пропуск сидера. Використовуйте --reset для повторного заповнення.")
-        db.close()
-        return
 
-    print("🌱 Генерація рівнів лояльності (dandel.io)...")
-    levels_data = [
-        {"name": "Насіння", "min_bonuses": 0.0, "discount": 5.0, "desc": "Стартовий рівень лояльності. Насіннячко вашого логістичного шляху. 🌾"},
-        {"name": "Парашутик", "min_bonuses": 100.0, "discount": 7.0, "desc": "Парашутик кульбаби вже підхоплений вітром і летить вперед! 🎈"},
-        {"name": "Суцвіття", "min_bonuses": 500.0, "discount": 10.0, "desc": "Яскраве суцвіття нашої співпраці. Максимальна довіра та пріоритет. 🌼"},
-        {"name": "Золота кульбаба", "min_bonuses": 1500.0, "discount": 15.0, "desc": "Королівський статус лояльності. Ваша логістика повністю під нашим крилом! 👑"}
-    ]
+    if not db.query(models.RiskZone).first():
+        print("🌱 Генерація небезпечних зон (RiskZones)...")
+        db.add_all([
+            models.RiskZone(name="Східний фронт", lat=48.6, lng=36.8, radius_km=150.0),
+            models.RiskZone(name="Південний фронт", lat=46.6, lng=32.6, radius_km=120.0),
+            models.RiskZone(name="Зона ризику", lat=34.0, lng=44.0, radius_km=50.0)
+        ])
+        db.commit()
+
+    if not db.query(models.LoyaltyLevel).first():
+        print("🌱 Генерація рівнів лояльності (dandel.io)...")
+        levels_data = [
+            {"name": "Насіння", "min_bonuses": 0.0, "discount": 5.0, "desc": "Стартовий рівень лояльності. Насіннячко вашого логістичного шляху. 🌾"},
+            {"name": "Парашутик", "min_bonuses": 100.0, "discount": 7.0, "desc": "Парашутик кульбаби вже підхоплений вітром і летить вперед! 🎈"},
+            {"name": "Суцвіття", "min_bonuses": 500.0, "discount": 10.0, "desc": "Яскраве суцвіття нашої співпраці. Максимальна довіра та пріоритет. 🌼"},
+            {"name": "Золота кульбаба", "min_bonuses": 1500.0, "discount": 15.0, "desc": "Королівський статус лояльності. Ваша логістика повністю під нашим крилом! 👑"}
+        ]
+        
+        for ld in levels_data:
+            lvl = models.LoyaltyLevel(
+                name=ld["name"],
+                min_bonuses=ld["min_bonuses"],
+                discount_percentage=ld["discount"],
+                description=ld["desc"]
+            )
+            db.add(lvl)
+        db.commit()
     
-    db_levels = {}
-    for ld in levels_data:
-        lvl = models.LoyaltyLevel(
-            name=ld["name"],
-            min_bonuses=ld["min_bonuses"],
-            discount_percentage=ld["discount"],
-            description=ld["desc"]
-        )
-        db.add(lvl)
-        db.flush()
-        db_levels[ld["name"]] = lvl
-    db.commit()
+    db_levels = {lvl.name: lvl for lvl in db.query(models.LoyaltyLevel).all()}
 
-    print("🌱 Генерація користувачів (dandel.io)...")
-    
-    # 1. Створюємо головного демо-користувача (Константин Кульбаба)
-    demo_user = models.User(
-        email="test@dandel.io",
-        full_name="Костянтин Кульбаба",
-        hashed_password=get_password_hash("testpass123"),
-        role="customer",
-        bonuses_balance=250.0,
-        loyalty_level_id=db_levels["Парашутик"].id
-    )
-    db.add(demo_user)
-    
-    # 2. Створюємо адміністратора системи
-    admin_user = models.User(
-        email="admin@dandel.io",
-        full_name="Олександр Вітер",
-        hashed_password=get_password_hash("adminpass123"),
-        role="admin",
-        bonuses_balance=0.0,
-        loyalty_level_id=db_levels["Золота кульбаба"].id
-    )
-    db.add(admin_user)
-
-    # 3. Створюємо елітного водія доставки dandel.io
-    driver_user = models.User(
-        email="driver@dandel.io",
-        full_name="Андрій Колісник",
-        hashed_password=get_password_hash("driverpass123"),
-        role="driver",
-        bonuses_balance=0.0,
-        loyalty_level_id=db_levels["Насіння"].id
-    )
-    db.add(driver_user)
-
-    # 4. Створюємо кілька інших випадкових клієнтів
-    other_users = []
-    for i in range(5):
-        name = UKRAINIAN_NAMES[i]
-        email = f"user_{random.randint(100, 999)}@dandel.io"
-        u = models.User(
-            email=email,
-            full_name=name,
-            hashed_password=get_password_hash("pass123"),
+    if not db.query(models.User).first():
+        print("🌱 Генерація користувачів (dandel.io)...")
+        
+        # 1. Створюємо головного демо-користувача (Константин Кульбаба)
+        demo_user = models.User(
+            email="test@dandel.io",
+            full_name="Костянтин Кульбаба",
+            hashed_password=get_password_hash("testpass123"),
             role="customer",
-            bonuses_balance=float(random.randint(10, 150)),
-            loyalty_level_id=db_levels[random.choice(["Насіння", "Парашутик", "Суцвіття"])].id
+            bonuses_balance=250.0,
+            loyalty_level_id=db_levels["Парашутик"].id
         )
-        db.add(u)
-        db.flush()
-        other_users.append(u)
+        db.add(demo_user)
+        
+        # 2. Створюємо адміністратора системи
+        admin_user = models.User(
+            email="admin@dandel.io",
+            full_name="Олександр Вітер",
+            hashed_password=get_password_hash("adminpass123"),
+            role="admin",
+            bonuses_balance=0.0,
+            loyalty_level_id=db_levels["Золота кульбаба"].id
+        )
+        db.add(admin_user)
 
-    db.commit()
-    print("✅ Користувачів успішно додано.")
+        # 3. Створюємо елітного водія доставки dandel.io
+        driver_user = models.User(
+            email="driver@dandel.io",
+            full_name="Андрій Колісник",
+            hashed_password=get_password_hash("driverpass123"),
+            role="driver",
+            bonuses_balance=0.0,
+            loyalty_level_id=db_levels["Насіння"].id
+        )
+        db.add(driver_user)
 
-    print("🚚 Генерація логістичних доставок з мультикритеріальними сценаріями...")
+        # 4. Створюємо кілька інших випадкових клієнтів
+        other_users = []
+        for i in range(5):
+            name = UKRAINIAN_NAMES[i]
+            email = f"user_{random.randint(100, 999)}@dandel.io"
+            u = models.User(
+                email=email,
+                full_name=name,
+                hashed_password=get_password_hash("pass123"),
+                role="customer",
+                bonuses_balance=float(random.randint(10, 150)),
+                loyalty_level_id=db_levels[random.choice(["Насіння", "Парашутик", "Суцвіття"])].id
+            )
+            db.add(u)
+
+        db.commit()
+        print("✅ Користувачів успішно додано.")
+    else:
+        print("⏭️ Користувачі вже існують. Пропуск генерації.")
+
+    if not db.query(models.Vehicle).first():
+        print("🚛 Генерація автопарку (141 машина)...")
+        vehicles = []
+        models_list = ["Mercedes Sprinter", "Renault Master", "Ford Transit", "MAN TGX", "Volvo FH", "Scania R450"]
+        types_list = ["Фура", "Рефрижератор", "Міні-вен", "Електро-трак"]
+        statuses = ["Available", "In_Transit", "Maintenance", "Offline"]
+        
+        for i in range(141):
+            v_type = random.choice(types_list)
+            cap = 1500 if v_type == "Міні-вен" else (5000 if v_type == "Електро-трак" else 20000)
+            v = models.Vehicle(
+                plate=f"AA{1000 + i:04d}BC",
+                model=random.choice(models_list),
+                type=v_type,
+                capacity_kg=cap + random.randint(-500, 500),
+                status=random.choices(statuses, weights=[60, 30, 5, 5])[0]
+            )
+            vehicles.append(v)
+        
+        db.add_all(vehicles)
+        db.commit()
+        print("✅ Автопарк успішно згенеровано.")
+
+    other_users = db.query(models.User).filter(models.User.role == "customer").all()
+    demo_user = db.query(models.User).filter_by(email="test@dandel.io").first()
+    if not demo_user and other_users:
+        demo_user = other_users[0]
+
+    should_seed_deliveries = not db.query(models.Delivery).first() and demo_user
+    if should_seed_deliveries:
+        print("🚚 Генерація логістичних доставок з мультикритеріальними сценаріями...")
+    else:
+        print("⏭️ Доставки вже існують. Пропуск генерації.")
 
     # Створюємо набір фіксованих цікавих доставок для головного демо-користувача
     demo_deliveries_data = [
@@ -248,147 +288,155 @@ def seed_data(reset=False):
     all_seeded_deliveries = []
 
     # Додаємо демо-доставки
-    for dd in demo_deliveries_data:
-        lat, lng = get_lerp_coords(dd["origin_city"], dd["destination_city"], dd["progress"])
-        d = models.Delivery(
-            sender_id=demo_user.id,
-            cargo_name=dd["cargo_name"],
-            cargo_type=dd["cargo_type"],
-            weight=dd["weight"],
-            declared_value=dd["declared_value"],
-            is_cross_border=dd["is_cross_border"],
-            origin_city=dd["origin_city"],
-            destination_city=dd["destination_city"],
-            sender_name=dd["sender_name"],
-            receiver_name=dd["receiver_name"],
-            receiver_phone=dd["receiver_phone"],
-            scenario=dd["scenario"],
-            escort_requested=dd["escort_requested"],
-            status=dd["status"],
-            current_lat=lat if dd["status"] in ["In_Transit", "Delivered"] else None,
-            current_lng=lng if dd["status"] in ["In_Transit", "Delivered"] else None,
-            price=dd["price"],
-            duration_hours=dd["duration_hours"],
-            safety_score=dd["safety_score"],
-            co2_footprint=dd["co2_footprint"],
-            bonuses_spent=dd["bonuses_spent"],
-            bonuses_earned=dd["bonuses_earned"],
-            photo_proof=dd["photo_proof"],
-            created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(1, 10))
-        )
-        db.add(d)
-        db.flush()
-        all_seeded_deliveries.append(d)
-
-    # 5. Генеруємо історичні замовлення для інших користувачів
-    for u in other_users:
-        for _ in range(random.randint(2, 4)):
-            cargo = random.choice(CARGO_TEMPLATES)
-            origin = random.choice(list(CITIES_COORDS.keys()))
-            dest = random.choice([c for c in list(CITIES_COORDS.keys()) if c != origin])
-            scenario = random.choice(["Експрес", "Економ", "Безпечний"])
-            status = random.choice(["Delivered", "Cancelled", "In_Transit"])
-            
-            is_cross = origin in ["Варшава", "Берлін", "Прага"] or dest in ["Варшава", "Берлін", "Прага"]
-            escort = scenario == "Безпечний" and random.choice([True, False])
-            
-            # Розрахунок реалістичних показників
-            dist_factor = 250 + random.randint(100, 800)
-            price = dist_factor * (1.8 if scenario == "Експрес" else 0.8 if scenario == "Економ" else 1.2)
-            if escort:
-                price += 500.0
-            
-            duration = (dist_factor / 80.0) if scenario == "Експрес" else (dist_factor / 40.0)
-            safety = 9.8 if scenario == "Безпечний" else 8.2 if scenario == "Експрес" else 6.5
-            if escort:
-                safety = 10.0
-                
-            co2 = cargo["weight"] * 0.15 * (dist_factor / 100.0)
-            if scenario == "Економ":
-                co2 *= 0.5  # Екологічно збірний вантаж
-
-            progress = 1.0 if status == "Delivered" else 0.45 if status == "In_Transit" else 0.0
-            lat, lng = get_lerp_coords(origin, dest, progress)
-
+    if should_seed_deliveries:
+        for dd in demo_deliveries_data:
+            lat, lng = get_lerp_coords(dd["origin_city"], dd["destination_city"], dd["progress"])
             d = models.Delivery(
-                sender_id=u.id,
-                cargo_name=cargo["name"],
-                cargo_type=cargo["type"],
-                weight=cargo["weight"],
-                declared_value=cargo["value"],
-                is_cross_border=is_cross,
-                origin_city=origin,
-                destination_city=dest,
-                sender_name=u.full_name,
-                receiver_name=random.choice(UKRAINIAN_NAMES),
-                receiver_phone=f"+380{random.randint(50, 99)}{random.randint(100, 999)}{random.randint(10, 99)}{random.randint(10, 99)}",
-                scenario=scenario,
-                escort_requested=escort,
-                status=status,
-                current_lat=lat if status in ["In_Transit", "Delivered"] else None,
-                current_lng=lng if status in ["In_Transit", "Delivered"] else None,
-                price=round(price, 2),
-                duration_hours=round(duration, 1),
-                safety_score=safety,
-                co2_footprint=round(co2, 2),
-                bonuses_spent=0.0,
-                bonuses_earned=round(price * 0.05, 2),
-                photo_proof=random.choice(PHOTO_PROOFS) if status == "Delivered" else None,
-                created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(5, 45))
+                sender_id=demo_user.id,
+                cargo_name=dd["cargo_name"],
+                cargo_type=dd["cargo_type"],
+                weight=dd["weight"],
+                declared_value=dd["declared_value"],
+                is_cross_border=dd["is_cross_border"],
+                origin_city=dd["origin_city"],
+                destination_city=dd["destination_city"],
+                sender_name=dd["sender_name"],
+                receiver_name=dd["receiver_name"],
+                receiver_phone=dd["receiver_phone"],
+                scenario=dd["scenario"],
+                escort_requested=dd["escort_requested"],
+                status=dd["status"],
+                current_lat=lat if dd["status"] in ["In_Transit", "Delivered"] else None,
+                current_lng=lng if dd["status"] in ["In_Transit", "Delivered"] else None,
+                price=dd["price"],
+                duration_hours=dd["duration_hours"],
+                safety_score=dd["safety_score"],
+                co2_footprint=dd["co2_footprint"],
+                bonuses_spent=dd["bonuses_spent"],
+                bonuses_earned=dd["bonuses_earned"],
+                photo_proof=dd["photo_proof"],
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(1, 10))
             )
             db.add(d)
             db.flush()
             all_seeded_deliveries.append(d)
 
-    db.commit()
-    print("✅ Доставки успішно згенеровані.")
+    # 5. Генеруємо історичні замовлення для інших користувачів
+    if should_seed_deliveries:
+        for u in other_users:
+            for _ in range(random.randint(2, 4)):
+                cargo = random.choice(CARGO_TEMPLATES)
+                origin = random.choice(list(CITIES_COORDS.keys()))
+                dest = random.choice([c for c in list(CITIES_COORDS.keys()) if c != origin])
+                scenario = random.choice(["Експрес", "Економ", "Безпечний"])
+                status = random.choice(["Delivered", "Cancelled", "In_Transit"])
+                
+                is_cross = origin in ["Варшава", "Берлін", "Прага"] or dest in ["Варшава", "Берлін", "Прага"]
+                escort = scenario == "Безпечний" and random.choice([True, False])
+                
+                # Розрахунок реалістичних показників
+                dist_factor = 250 + random.randint(100, 800)
+                price = dist_factor * (1.8 if scenario == "Експрес" else 0.8 if scenario == "Економ" else 1.2)
+                if escort:
+                    price += 500.0
+                
+                duration = (dist_factor / 80.0) if scenario == "Експрес" else (dist_factor / 40.0)
+                safety = 9.8 if scenario == "Безпечний" else 8.2 if scenario == "Експрес" else 6.5
+                if escort:
+                    safety = 10.0
+                    
+                co2 = cargo["weight"] * 0.15 * (dist_factor / 100.0)
+                if scenario == "Економ":
+                    co2 *= 0.5  # Екологічно збірний вантаж
 
-    print("🌼 Нарахування трансакцій бонусної лояльності...")
+                progress = 1.0 if status == "Delivered" else 0.45 if status == "In_Transit" else 0.0
+                lat, lng = get_lerp_coords(origin, dest, progress)
 
-    # Додаємо кілька красивих трансакцій для головного користувача
-    demo_transactions = [
-        {"amount": 100.0, "desc": "Вітальні бонуси при реєстрації на dandel.io 🌱"},
-        {"amount": 122.5, "desc": "Нарахування 5% бонусів за успішну доставку збірного вантажу"},
-        {"amount": -50.0, "desc": "Списання бонусів при оформленні відправлення коробки в Київ"},
-        {"amount": 77.5, "desc": "Нарахування бонусів за екологічний SAW-маршрут"}
-    ]
+                d = models.Delivery(
+                    sender_id=u.id,
+                    cargo_name=cargo["name"],
+                    cargo_type=cargo["type"],
+                    weight=cargo["weight"],
+                    declared_value=cargo["value"],
+                    is_cross_border=is_cross,
+                    origin_city=origin,
+                    destination_city=dest,
+                    sender_name=u.full_name,
+                    receiver_name=random.choice(UKRAINIAN_NAMES),
+                    receiver_phone=f"+380{random.randint(50, 99)}{random.randint(100, 999)}{random.randint(10, 99)}{random.randint(10, 99)}",
+                    scenario=scenario,
+                    escort_requested=escort,
+                    status=status,
+                    current_lat=lat if status in ["In_Transit", "Delivered"] else None,
+                    current_lng=lng if status in ["In_Transit", "Delivered"] else None,
+                    price=round(price, 2),
+                    duration_hours=round(duration, 1),
+                    safety_score=safety,
+                    co2_footprint=round(co2, 2),
+                    bonuses_spent=0.0,
+                    bonuses_earned=round(price * 0.05, 2),
+                    photo_proof=random.choice(PHOTO_PROOFS) if status == "Delivered" else None,
+                    created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(5, 45))
+                )
+                db.add(d)
+                db.flush()
+                all_seeded_deliveries.append(d)
 
-    for tx in demo_transactions:
-        t = models.BonusTransaction(
-            user_id=demo_user.id,
-            amount=tx["amount"],
-            description=tx["desc"],
-            created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(1, 15))
-        )
-        db.add(t)
+        db.commit()
+        print("✅ Доставки успішно згенеровані.")
 
-    # Додаємо бонуси іншим користувачам
-    for u in other_users:
-        t = models.BonusTransaction(
-            user_id=u.id,
-            amount=u.bonuses_balance,
-            description="Стартовий бонус лояльності",
-            created_at=datetime.datetime.utcnow() - datetime.timedelta(days=20)
-        )
-        db.add(t)
+    if not db.query(models.BonusTransaction).first() and demo_user:
+        print("🌼 Нарахування трансакцій бонусної лояльності...")
 
-    db.commit()
-    print("✅ Бонусна система заповнена трансакціями.")
+        # Додаємо кілька красивих трансакцій для головного користувача
+        demo_transactions = [
+            {"amount": 100.0, "desc": "Вітальні бонуси при реєстрації на dandel.io 🌱"},
+            {"amount": 122.5, "desc": "Нарахування 5% бонусів за успішну доставку збірного вантажу"},
+            {"amount": -50.0, "desc": "Списання бонусів при оформленні відправлення коробки в Київ"},
+            {"amount": 77.5, "desc": "Нарахування бонусів за екологічний SAW-маршрут"}
+        ]
 
-    print("💬 Створення демонстраційного діалогу з логістичним AI-асистентом...")
+        for tx in demo_transactions:
+            t = models.BonusTransaction(
+                user_id=demo_user.id,
+                amount=tx["amount"],
+                description=tx["desc"],
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(1, 15))
+            )
+            db.add(t)
 
-    # Створюємо діалог для головного демо-користувача
-    for i, msg in enumerate(CHAT_PRESETS):
-        m = models.ChatMessage(
-            user_id=demo_user.id,
-            sender_type=msg["type"],
-            content=msg["content"],
-            created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=15 - i * 2)
-        )
-        db.add(m)
+        # Додаємо бонуси іншим користувачам
+        for u in other_users:
+            t = models.BonusTransaction(
+                user_id=u.id,
+                amount=u.bonuses_balance,
+                description="Стартовий бонус лояльності",
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(days=20)
+            )
+            db.add(t)
 
-    db.commit()
-    print("✅ Логи повідомлень чату успішно імпортовано.")
+        db.commit()
+        print("✅ Бонусна система заповнена трансакціями.")
+    else:
+        print("⏭️ Трансакції вже існують. Пропуск генерації.")
+
+    if not db.query(models.ChatMessage).first() and demo_user:
+        print("💬 Створення демонстраційного діалогу з логістичним AI-асистентом...")
+
+        # Створюємо діалог для головного демо-користувача
+        for i, msg in enumerate(CHAT_PRESETS):
+            m = models.ChatMessage(
+                user_id=demo_user.id,
+                sender_type=msg["type"],
+                content=msg["content"],
+                created_at=datetime.datetime.utcnow() - datetime.timedelta(minutes=15 - i * 2)
+            )
+            db.add(m)
+
+        db.commit()
+        print("✅ Логи повідомлень чату успішно імпортовано.")
+    else:
+        print("⏭️ Логи чату вже існують. Пропуск генерації.")
     
     print("\n🎉 БАЗУ ДАНИХ DANDEL.IO УСПІШНО ЗАПОВНЕНО ПРЕМІУМ-ДАННИМИ! 🌾")
     print(f"🔑 Демо-акаунт клієнта: test@dandel.io / Пароль: testpass123")

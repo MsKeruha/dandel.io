@@ -74,12 +74,8 @@ export const SupportChat: React.FC = () => {
           </p>
           <div className="operator-quick-stats">
             <div className="quick-stat">
-              <span>Середній час відповіді:</span>
-              <strong><Icon name="zap" size={12} /> Миттєво</strong>
-            </div>
-            <div className="quick-stat">
-              <span>Оператори онлайн:</span>
-              <strong><Icon name="activity" size={12} /> 24/7</strong>
+              <span>Статус:</span>
+              <strong><Icon name="activity" size={12} /> {chatMessages.length > 0 ? 'Оператор на зв\'язку' : 'Очікує підключення...'}</strong>
             </div>
           </div>
         </div>

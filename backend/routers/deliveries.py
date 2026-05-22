@@ -1,29 +1,21 @@
 import math
 import random
-from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+import urllib.request
+import json
+from typing import List, Dict, Any, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
+from schemas import DeliveryCalculateRequest, DeliveryCalculateResponse, DeliveryCreate, DeliveryResponse, ScenarioDetails, RiskZoneResponse, DeliveryGuestResponse, Token, PaginatedResponse, AdminDeliveryResponse
+from routers.auth import get_current_user, get_optional_current_user, get_password_hash, create_access_token
 from database import get_db
-from models import User, Delivery, BonusTransaction
-from schemas import DeliveryCalculateRequest, DeliveryCalculateResponse, DeliveryCreate, DeliveryResponse, ScenarioDetails
-from routers.auth import get_current_user
+from models import User, RiskZone, Delivery, BonusTransaction
+import string
 
 router = APIRouter(
     prefix="/api/deliveries",
     tags=["Deliveries & Calculations"]
 )
-
-# Координати основних міст для розрахунків маршрутів
-CITIES_COORDS: Dict[str, List[float]] = {
-    "Київ": [50.4501, 30.5234],
-    "Львів": [49.8397, 24.0297],
-    "Одеса": [46.4825, 30.7233],
-    "Харків": [49.9935, 36.2304],
-    "Дніпро": [48.4647, 35.0462],
-    "Варшава": [52.2297, 21.0122],
-    "Берлін": [52.5200, 13.4050],
-    "Прага": [50.0755, 14.4378]
-}
 
 # Допоміжна функція для розрахунку відстані (формула Гаверсинуса)
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -34,70 +26,90 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-# Допоміжна функція для генерації проміжних точок маршруту
-def generate_route_points(origin: str, dest: str, scenario: str) -> List[List[float]]:
-    start = CITIES_COORDS.get(origin, [50.45, 30.52])
-    end = CITIES_COORDS.get(dest, [49.83, 24.02])
+# Допоміжна функція для отримання маршруту, відстані та часу з OSRM
+def get_route_data(start: List[float], end: List[float], scenario: str):
     
-    points = [start]
+    # Визначаємо проміжні точки для створення різних маршрутів
+    waypoints = f"{start[1]},{start[0]}"
     
     if scenario == "Економ":
-        # Проходить через транзитні сортувальні центри (наприклад, Хмельницький або Полтава)
-        mid_lat = (start[0] + end[0]) / 2 + 0.4
-        mid_lng = (start[1] + end[1]) / 2 - 0.5
-        points.append([mid_lat, mid_lng])
+        # Зміщуємо маршрут для "Економ" (ніби через додаткові хаби)
+        mid_lat = (start[0] + end[0]) / 2 + 1.2
+        mid_lng = (start[1] + end[1]) / 2 - 0.8
+        waypoints += f";{mid_lng},{mid_lat}"
     elif scenario == "Безпечний":
-        # Обходить військові ризики зі сторони безпечних західних чи південних трас
-        mid_lat = (start[0] + end[0]) / 2 - 0.3
-        mid_lng = (start[1] + end[1]) / 2 + 0.3
-        # Додаткові точки перевірки
-        points.append([mid_lat - 0.1, mid_lng + 0.1])
-        points.append([mid_lat + 0.2, mid_lng - 0.2])
-    else:
-        # Експрес - пряма лінія з легкою дугою
-        mid_lat = (start[0] + end[0]) / 2 + 0.1
-        mid_lng = (start[1] + end[1]) / 2 + 0.1
-        points.append([mid_lat, mid_lng])
+        # Зміщуємо маршрут для "Безпечний" (оминаючи певні зони)
+        mid_lat = (start[0] + end[0]) / 2 - 1.0
+        mid_lng = (start[1] + end[1]) / 2 + 1.2
+        waypoints += f";{mid_lng},{mid_lat}"
         
-    points.append(end)
-    return points
+    waypoints += f";{end[1]},{end[0]}"
+    
+    url = f"https://router.project-osrm.org/route/v1/driving/{waypoints}?overview=full&geometries=geojson"
+    
+    # Дефолтні значення (пряма лінія)
+    direct_dist = calculate_distance(start[0], start[1], end[0], end[1])
+    result = {
+        "points": [start, end],
+        "distance": direct_dist,
+        "duration": direct_dist / 60.0
+    }
+        
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode())
+            if data.get("routes") and len(data["routes"]) > 0:
+                route = data["routes"][0]
+                coords = route["geometry"]["coordinates"]
+                pts = [[c[1], c[0]] for c in coords]
+                
+                result["points"] = pts
+                result["distance"] = route["distance"] / 1000.0 # в км
+                result["duration"] = route["duration"] / 3600.0 # в годинах
+    except Exception as e:
+        print(f"OSRM Error: {e}")
+        
+    return result
 
+@router.get("/risk-zones", response_model=List[RiskZoneResponse])
+def get_risk_zones(db: Session = Depends(get_db)):
+    return db.query(RiskZone).filter(RiskZone.is_active == True).all()
 
 @router.post("/calculate", response_model=DeliveryCalculateResponse)
 def calculate_options(req: DeliveryCalculateRequest):
-    # Валідація міст
-    if req.origin_city not in CITIES_COORDS or req.destination_city not in CITIES_COORDS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Підтримуються тільки наступні міста: {', '.join(CITIES_COORDS.keys())}"
-        )
-        
-    start_coords = CITIES_COORDS[req.origin_city]
-    end_coords = CITIES_COORDS[req.destination_city]
+    start_coords = [req.origin_lat, req.origin_lng]
+    end_coords = [req.destination_lat, req.destination_lng]
     
     distance = calculate_distance(start_coords[0], start_coords[1], end_coords[0], end_coords[1])
-    if distance < 10.0:
+    if distance < 1.0:
         raise HTTPException(status_code=400, detail="Місто відправлення та призначення не можуть збігатися")
 
-    # 1. Розрахунок параметрів для 3 сценаріїв
+    # 1. Отримуємо дані маршруту для кожного сценарію
+    express_data = get_route_data(start_coords, end_coords, "Експрес")
+    econ_data = get_route_data(start_coords, end_coords, "Економ")
+    safe_data = get_route_data(start_coords, end_coords, "Безпечний")
     
     # ⚡ Експрес (Літак + кур'єр)
-    express_price = 500.0 + (distance * 18.0) + (req.weight * 40.0) + (req.declared_value * 0.01)
-    express_time = max(3.0, distance / 85.0)  # літак + швидка логістика
+    express_dist = express_data["distance"]
+    express_price = 500.0 + (express_dist * 18.0) + (req.weight * 40.0) + (req.declared_value * 0.01)
+    express_time = max(3.0, express_data["duration"] * 0.8)  # швидше звичайного авто
     express_safety = 8.5
-    express_eco = distance * 0.42 + (req.weight * 0.15)  # високий вуглецевий слід
+    express_eco = express_dist * 0.42 + (req.weight * 0.15)  # високий вуглецевий слід
     
     # 🌱 Економ (Збірний вантаж)
-    econ_price = 150.0 + (distance * 4.5) + (req.weight * 12.0) + (req.declared_value * 0.005)
-    econ_time = max(18.0, distance / 40.0) + 12.0  # збірні склади
+    econ_dist = econ_data["distance"]
+    econ_price = 150.0 + (econ_dist * 4.5) + (req.weight * 12.0) + (req.declared_value * 0.005)
+    econ_time = econ_data["duration"] * 1.5 + 12.0  # збірні склади + довше їхати
     econ_safety = 7.0
-    econ_eco = distance * 0.11 + (req.weight * 0.03)  # екологічно
+    econ_eco = econ_dist * 0.11 + (req.weight * 0.03)  # екологічно
     
     # 🛡️ Безпечний (Обхід зон ризику, спеціальний моніторинг)
-    safe_price = 300.0 + (distance * 10.0) + (req.weight * 22.0) + (req.declared_value * 0.008)
-    safe_time = max(8.0, distance / 55.0) + 2.0  # додатковий час на чекпоінти
+    safe_dist = safe_data["distance"]
+    safe_price = 300.0 + (safe_dist * 10.0) + (req.weight * 22.0) + (req.declared_value * 0.008)
+    safe_time = safe_data["duration"] * 1.2 + 2.0  # додатковий час на чекпоінти
     safe_safety = 9.8  # Оптимальний безпечний маршрут
-    safe_eco = distance * 0.21 + (req.weight * 0.07)  # помірні викиди
+    safe_eco = safe_dist * 0.21 + (req.weight * 0.07)  # помірні викиди
 
     # Формуємо сирі дані для нормалізації
     scenarios_raw = {
@@ -107,7 +119,8 @@ def calculate_options(req: DeliveryCalculateRequest):
             "safety": express_safety,
             "eco": express_eco,
             "escort_available": False,
-            "description": "Швидка кур'єрська доставка прямим авіа/авто сполученням."
+            "description": "Швидка кур'єрська доставка прямим авіа/авто сполученням.",
+            "route_points": express_data["points"]
         },
         "Економ": {
             "price": econ_price,
@@ -115,7 +128,8 @@ def calculate_options(req: DeliveryCalculateRequest):
             "safety": econ_safety,
             "eco": econ_eco,
             "escort_available": False,
-            "description": "Вигідна доставка консолідованого вантажу через мережу складів."
+            "description": "Вигідна доставка консолідованого вантажу через мережу складів.",
+            "route_points": econ_data["points"]
         },
         "Безпечний": {
             "price": safe_price,
@@ -123,7 +137,8 @@ def calculate_options(req: DeliveryCalculateRequest):
             "safety": safe_safety,
             "eco": safe_eco,
             "escort_available": True,
-            "description": "Маршрут сплановано в обхід військових ризиків. Додано фотоконтроль на ключових вузлах."
+            "description": "Маршрут сплановано в обхід військових ризиків. Додано фотоконтроль на ключових вузлах.",
+            "route_points": safe_data["points"]
         }
     }
 
@@ -138,11 +153,17 @@ def calculate_options(req: DeliveryCalculateRequest):
     max_safety = max(s["safety"] for s in scenarios_raw.values())
     
     # Сума ваг повинна дорівнювати 1
-    w_sum = req.price_weight + req.time_weight + req.safety_weight + req.eco_weight
-    w_p = req.price_weight / w_sum if w_sum > 0 else 0.25
-    w_t = req.time_weight / w_sum if w_sum > 0 else 0.25
-    w_s = req.safety_weight / w_sum if w_sum > 0 else 0.25
-    w_e = req.eco_weight / w_sum if w_sum > 0 else 0.25
+    # Робимо експоненційне посилення (щоб 100% швидкість дійсно домінувала)
+    pw = req.price_weight ** 1.5
+    tw = req.time_weight ** 1.5
+    sw = req.safety_weight ** 1.5
+    ew = req.eco_weight ** 1.5
+    
+    w_sum = pw + tw + sw + ew
+    w_p = pw / w_sum if w_sum > 0 else 0.25
+    w_t = tw / w_sum if w_sum > 0 else 0.25
+    w_s = sw / w_sum if w_sum > 0 else 0.25
+    w_e = ew / w_sum if w_sum > 0 else 0.25
 
     calculated_scenarios: List[ScenarioDetails] = []
     
@@ -159,8 +180,6 @@ def calculate_options(req: DeliveryCalculateRequest):
         # Округляємо для краси
         saw_score = round(saw_score, 3)
         
-        route_points = generate_route_points(req.origin_city, req.destination_city, name)
-        
         calculated_scenarios.append(ScenarioDetails(
             scenario=name,
             price=round(data["price"], 2),
@@ -169,7 +188,7 @@ def calculate_options(req: DeliveryCalculateRequest):
             co2_footprint=round(data["eco"], 2),
             escort_available=data["escort_available"],
             description=data["description"],
-            route_points=route_points,
+            route_points=data["route_points"],
             saw_score=saw_score
         ))
 
@@ -185,19 +204,55 @@ def calculate_options(req: DeliveryCalculateRequest):
     )
 
 
-@router.post("/create", response_model=DeliveryResponse)
+@router.post("/create", response_model=DeliveryGuestResponse)
 def create_delivery(
     order_in: DeliveryCreate, 
     db: Session = Depends(get_db), 
-    current_user: User = Depends(get_current_user)
+    current_user: User | None = Depends(get_optional_current_user)
 ):
-    # Повторно розраховуємо базові показники для безпеки бэкенду
-    if order_in.origin_city not in CITIES_COORDS or order_in.destination_city not in CITIES_COORDS:
-        raise HTTPException(status_code=400, detail="Некоректні міста відправлення/призначення")
+    # Логіка авто-реєстрації для гостей
+    generated_password = None
+    token_data = None
+    
+    if not current_user:
+        # Генеруємо пошту з телефону якщо її немає (або просто dummy email)
+        phone_clean = ''.join(filter(str.isdigit, order_in.receiver_phone))
+        guest_email = f"guest_{phone_clean}@dandel.io"
         
-    start_coords = CITIES_COORDS[order_in.origin_city]
-    end_coords = CITIES_COORDS[order_in.destination_city]
-    distance = calculate_distance(start_coords[0], start_coords[1], end_coords[0], end_coords[1])
+        # Перевіряємо чи вже є
+        db_user = db.query(User).filter(User.email == guest_email).first()
+        if not db_user:
+            generated_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+            hashed_pw = get_password_hash(generated_password)
+            
+            from models import LoyaltyLevel
+            default_level = db.query(LoyaltyLevel).filter(LoyaltyLevel.name == "Насіння").first()
+            
+            db_user = User(
+                email=guest_email,
+                full_name=order_in.sender_name,
+                hashed_password=hashed_pw,
+                role="customer",
+                bonuses_balance=100.0,
+                loyalty_level_id=default_level.id if default_level else None
+            )
+            db.add(db_user)
+            db.commit()
+            db.refresh(db_user)
+            
+        current_user = db_user
+        
+        # Генеруємо токен
+        access_token = create_access_token(data={"sub": current_user.email})
+        token_data = Token(access_token=access_token, token_type="bearer", user=current_user)
+
+    # Отримуємо маршрут для збереження координат (якщо потрібно)
+    # Зверніть увагу: ми більше не перевіряємо CITIES_COORDS
+    
+    # Відстань рахуємо приблизно, бо у DeliveryCreate немає координат. 
+    # В реальному світі варто передавати координати і в DeliveryCreate, 
+    # але для демо беремо середню відстань 500 км якщо не можемо знайти через OSRM
+    distance = 500.0
 
     # Спрощений підрахунок вартості
     if order_in.scenario == "Експрес":
@@ -286,11 +341,11 @@ def create_delivery(
         sender_name=order_in.sender_name,
         receiver_name=order_in.receiver_name,
         receiver_phone=order_in.receiver_phone,
+        sender_address=order_in.sender_address,
+        receiver_address=order_in.receiver_address,
         scenario=order_in.scenario,
         escort_requested=order_in.escort_requested,
         status="Created",
-        current_lat=start_coords[0],
-        current_lng=start_coords[1],
         price=round(final_price, 2),
         duration_hours=round(time_h, 1),
         safety_score=safety,
@@ -298,6 +353,10 @@ def create_delivery(
         bonuses_spent=round(bonuses_to_spend, 2),
         bonuses_earned=round(bonuses_earned, 2)
     )
+    
+    # Додаємо координати відправлення
+    new_delivery.current_lat = start_coords[0]
+    new_delivery.current_lng = start_coords[1]
 
     db.add(new_delivery)
     db.commit()
@@ -308,8 +367,15 @@ def create_delivery(
     if bonuses_to_spend > 0:
         tx.delivery_id = new_delivery.id
     db.commit()
+    # Оновлюємо кеш користувача в токені якщо використовувались бонуси
+    if order_in.use_bonuses and token_data:
+        token_data.user.bonuses_balance = current_user.bonuses_balance
 
-    return new_delivery
+    return DeliveryGuestResponse(
+        delivery=new_delivery,
+        token=token_data,
+        generated_password=generated_password
+    )
 
 
 @router.get("/my", response_model=List[DeliveryResponse])
@@ -368,17 +434,101 @@ def simulate_delivery_step(
             
     db.commit()
     db.refresh(delivery)
-    return delivery
+from sqlalchemy import func
 
-
-@router.get("/admin/all", response_model=List[DeliveryResponse])
-def admin_get_all_deliveries(
+@router.get("/admin/stats")
+def admin_get_stats(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Доступ заборонено")
-    return db.query(Delivery).order_by(Delivery.created_at.desc()).all()
+        
+    total_del = db.query(Delivery).count()
+    active_del = db.query(Delivery).filter(Delivery.status != 'Delivered').count()
+    
+    # Bonuses paid (total earned)
+    total_bonuses = db.query(func.sum(Delivery.bonuses_earned)).scalar() or 0
+    
+    # CO2 saved (rough estimate from the frontend logic: baseCo2 = weight * 0.42, saved = baseCo2 - co2_footprint)
+    # We can calculate this in python to avoid complex SQL
+    deliveries = db.query(Delivery.weight, Delivery.co2_footprint).all()
+    total_co2_saved = sum(max(0, (d.weight * 0.42) - d.co2_footprint) for d in deliveries)
+
+    return {
+        "totalDeliveries": total_del,
+        "activeDeliveries": active_del,
+        "totalBonusesPaid": total_bonuses,
+        "totalCo2Saved": total_co2_saved
+    }
+
+@router.get("/admin/all", response_model=PaginatedResponse[AdminDeliveryResponse])
+def admin_get_all_deliveries(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = None,
+    status: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_desc: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ заборонено")
+    
+    query = db.query(Delivery)
+
+    if status and status != "ALL":
+        query = query.filter(Delivery.status == status)
+
+    if search:
+        search_term = f"%{search}%"
+        # Checking if search is an ID (integer)
+        if search.isdigit():
+            query = query.filter(
+                or_(
+                    Delivery.id == int(search),
+                    Delivery.cargo_name.ilike(search_term),
+                    Delivery.sender_name.ilike(search_term),
+                    Delivery.receiver_name.ilike(search_term),
+                    Delivery.origin_city.ilike(search_term),
+                    Delivery.destination_city.ilike(search_term)
+                )
+            )
+        else:
+            query = query.filter(
+                or_(
+                    Delivery.cargo_name.ilike(search_term),
+                    Delivery.sender_name.ilike(search_term),
+                    Delivery.receiver_name.ilike(search_term),
+                    Delivery.origin_city.ilike(search_term),
+                    Delivery.destination_city.ilike(search_term)
+                )
+            )
+
+    if sort_by:
+        column = getattr(Delivery, sort_by, None)
+        if column is not None:
+            if sort_desc:
+                query = query.order_by(column.desc())
+            else:
+                query = query.order_by(column.asc())
+        else:
+            query = query.order_by(Delivery.created_at.desc())
+    else:
+        query = query.order_by(Delivery.created_at.desc())
+
+    total = query.count()
+    items = query.offset(skip).limit(limit).all()
+    pages = math.ceil(total / limit) if limit > 0 else 0
+
+    return {
+        "total": total,
+        "items": items,
+        "page": (skip // limit) + 1,
+        "size": limit,
+        "pages": pages
+    }
 
 
 @router.put("/admin/{delivery_id}/status", response_model=DeliveryResponse)

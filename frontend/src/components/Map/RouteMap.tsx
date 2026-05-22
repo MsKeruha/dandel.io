@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { useApp } from '../../context/AppContext';
 import './RouteMap.css';
 
 interface RouteMapProps {
@@ -9,6 +10,7 @@ interface RouteMapProps {
   currentLocation?: [number, number] | null;
   status?: string;
   isCrossBorder?: boolean;
+  allScenarios?: any[];
 }
 
 export const RouteMap: React.FC<RouteMapProps> = React.memo(({
@@ -18,11 +20,14 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
   scenario,
   currentLocation,
   status,
-  isCrossBorder
+  isCrossBorder,
+  allScenarios
 }) => {
+  const { isCalculating } = useApp();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const leafletMapRef = useRef<any>(null);
   const routePolylineRef = useRef<any>(null);
+  const otherRoutesRefs = useRef<any[]>([]);
   const markerOriginRef = useRef<any>(null);
   const markerDestRef = useRef<any>(null);
   const markerCarRef = useRef<any>(null);
@@ -48,21 +53,18 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
 
     // Ініціалізація карти, якщо її ще немає
     if (!leafletMapRef.current) {
-      // Центруємо на Україну за замовчуванням
       leafletMapRef.current = L.map(mapContainerRef.current, {
         center: [49.0, 31.0],
         zoom: 6,
         zoomControl: false
       });
 
-      // Додаємо красиві світлі преміум тайли CartoDB Positron (схожі на скін Google карт)
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; CartoDB &copy; OpenStreetMap contributors',
         subdomains: 'abcd',
         maxZoom: 20
       }).addTo(leafletMapRef.current);
 
-      // Додаємо кнопку зуму в кут
       L.control.zoom({ position: 'bottomright' }).addTo(leafletMapRef.current);
     }
 
@@ -70,26 +72,46 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
 
     // Видаляємо старі шари перед оновленням
     if (routePolylineRef.current) map.removeLayer(routePolylineRef.current);
+    otherRoutesRefs.current.forEach(layer => map.removeLayer(layer));
+    otherRoutesRefs.current = [];
+    
     if (markerOriginRef.current) map.removeLayer(markerOriginRef.current);
     if (markerDestRef.current) map.removeLayer(markerDestRef.current);
     if (markerCarRef.current) map.removeLayer(markerCarRef.current);
     if (riskCircleRef.current) map.removeLayer(riskCircleRef.current);
 
+    // Спочатку малюємо всі інші маршрути як фонові (дуже тонкими та прозорими)
+    if (allScenarios) {
+      allScenarios.forEach(sc => {
+        if (sc.scenario !== scenario && sc.route_points && sc.route_points.length >= 2) {
+          const pts = sc.route_points.map((p: any) => [p[0], p[1]]);
+          const poly = L.polyline(pts, {
+            color: getScenarioColor(sc.scenario),
+            weight: 2,
+            opacity: 0.15,
+            dashArray: '5, 5'
+          }).addTo(map);
+          otherRoutesRefs.current.push(poly);
+        }
+      });
+    }
+
     if (routePoints && routePoints.length >= 2) {
       const latLngs = routePoints.map(p => [p[0], p[1]]);
       const color = getScenarioColor(scenario);
 
-      // Малюємо лінію маршруту
+      // Малюємо лінію активного маршруту
       routePolylineRef.current = L.polyline(latLngs, {
         color: color,
         weight: 5,
-        opacity: 0.85,
+        opacity: 0.9,
         dashArray: scenario === 'Економ' ? '10, 10' : 'none',
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(map);
+      routePolylineRef.current.bringToFront();
 
-      // Кастомні маркери у вигляді круглих кульбабок з Lucide-стилем
+      // Кастомні маркери
       const createCustomIcon = (colorBg: string, label: string) => {
         return L.divIcon({
           html: `<div class="map-custom-marker" style="background-color: ${colorBg}">
@@ -102,7 +124,6 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
         });
       };
 
-      // Ставимо маркери відправлення та призначення
       const startPoint = latLngs[0];
       const endPoint = latLngs[latLngs.length - 1];
 
@@ -114,18 +135,15 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
         icon: createCustomIcon('#FFC72C', 'B')
       }).addTo(map).bindPopup(`<b>Призначення:</b> ${destination}`);
 
-      // Якщо це Безпечний рейс і ми в Україні, візуалізуємо умовну зону підвищеного ризику (наприклад, східніше Дніпра)
-      // яку наша система безпечно оминає стороною
       if (scenario === 'Безпечний') {
         riskCircleRef.current = L.circle([48.6, 36.8], {
           color: '#D9534F',
           fillColor: '#D9534F',
           fillOpacity: 0.15,
-          radius: 120000 // 120 км
+          radius: 120000 
         }).addTo(map).bindPopup('<b>⚠️ Зона підвищеного воєнного ризику</b><br>Маршрут dandel.io прокладено в обхід цього сектору.');
       }
 
-      // Якщо є поточне місцезнаходження вантажівки (для активного замовлення)
       if (currentLocation) {
         const carIcon = L.divIcon({
           html: `<div class="map-car-marker" style="border-color: ${color}">
@@ -142,11 +160,10 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
         
         map.setView(currentLocation, 7);
       } else {
-        // Інакше фокусуємо всю карту на лінію маршруту
         map.fitBounds(routePolylineRef.current.getBounds(), { padding: [50, 50] });
       }
     }
-  }, [origin, destination, routePoints, scenario, currentLocation, status]);
+  }, [origin, destination, routePoints, scenario, currentLocation, status, allScenarios]);
 
   const hasLeaflet = !!(window as any).L;
 
@@ -168,8 +185,17 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
       <div 
         id="leaflet-map" 
         ref={mapContainerRef} 
-        style={{ height: '400px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)' }}
+        className={isCalculating ? 'map-calculating' : ''}
+        style={{ height: '400px', width: '100%', borderRadius: '0 0 var(--radius-lg) var(--radius-lg)', position: 'relative' }}
       >
+        {isCalculating && (
+          <div className="map-loading-overlay">
+            <div className="loader-content">
+              <span className="dot-pulse"></span>
+              <p>dandel.io розраховує оптимальний маршрут...</p>
+            </div>
+          </div>
+        )}
         {/* Запасна інтерактивна SVG карта на випадок відсутності завантаження Leaflet */}
         {!hasLeaflet && (
           <div className="svg-map-fallback">
@@ -211,10 +237,10 @@ export const RouteMap: React.FC<RouteMapProps> = React.memo(({
                 <g>
                   <path 
                     d={scenario === 'Експрес' 
-                      ? 'M 250,200 Q 350,170 460,180' 
+                      ? 'M 250,200 L 300,190 L 350,185 L 400,182 L 460,180' 
                       : scenario === 'Економ'
-                        ? 'M 250,200 Q 300,240 380,210 T 460,180'
-                        : 'M 250,200 Q 330,140 400,160 T 460,180'} 
+                        ? 'M 250,200 L 280,230 L 350,240 L 420,220 L 460,180'
+                        : 'M 250,200 L 320,150 L 400,155 L 460,180'} 
                     fill="none" 
                     stroke={getScenarioColor(scenario)} 
                     strokeWidth="5" 

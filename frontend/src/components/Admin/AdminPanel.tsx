@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useOverlay } from '../../context/OverlayContext';
 import Icon from '../common/Icon';
+import { AdminChatPanel } from './AdminChatPanel';
 import './AdminPanel.css';
 
 interface AdminDelivery {
@@ -36,58 +38,225 @@ interface AdminUser {
   loyalty_level: string;
 }
 
+// Reusable Pagination Component
+const Pagination = ({ 
+  page, 
+  totalPages, 
+  onPageChange,
+  pageSize,
+  onPageSizeChange,
+  totalItems
+}: { 
+  page: number, 
+  totalPages: number, 
+  onPageChange: (p: number) => void,
+  pageSize: number,
+  onPageSizeChange: (s: number) => void,
+  totalItems: number
+}) => {
+  return (
+    <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+      <div className="page-size-selector">
+        <span className="muted-text" style={{marginRight: '10px'}}>Показувати по:</span>
+        <select value={pageSize} onChange={e => onPageSizeChange(Number(e.target.value))} className="status-filter-select" style={{width: '70px'}}>
+          <option value={10}>10</option>
+          <option value={20}>20</option>
+          <option value={50}>50</option>
+        </select>
+        <span className="muted-text" style={{marginLeft: '10px'}}>Всього: {totalItems}</span>
+      </div>
+      
+      <div className="page-buttons" style={{ display: 'flex', gap: '5px' }}>
+        <button 
+          className="btn-secondary" 
+          disabled={page <= 1} 
+          onClick={() => onPageChange(page - 1)}
+          style={{ padding: '5px 10px' }}
+        >
+          <Icon name="chevron-left" size={16} />
+        </button>
+        <span style={{ padding: '5px 15px', fontWeight: 'bold' }}>{page} / {totalPages || 1}</span>
+        <button 
+          className="btn-secondary" 
+          disabled={page >= totalPages} 
+          onClick={() => onPageChange(page + 1)}
+          style={{ padding: '5px 10px' }}
+        >
+          <Icon name="chevron-right" size={16} />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const AdminPanel: React.FC = () => {
   const { token } = useApp();
-  const [deliveries, setDeliveries] = useState<AdminDelivery[]>([]);
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [subTab, setSubTab] = useState<'deliveries' | 'users' | 'analytics' | 'fleet'>('deliveries');
+  const { showAlert, showConfirm } = useOverlay();
+  
+  const [subTab, setSubTab] = useState<'deliveries' | 'users' | 'analytics' | 'fleet' | 'chat'>('deliveries');
   const [updateMsg, setUpdateMsg] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Deliveries State
+  const [deliveries, setDeliveries] = useState<AdminDelivery[]>([]);
+  const [delPage, setDelPage] = useState(1);
+  const [delPageSize, setDelPageSize] = useState(10);
+  const [delTotal, setDelTotal] = useState(0);
+  const [delTotalPages, setDelTotalPages] = useState(0);
+  const [delSearch, setDelSearch] = useState('');
+  const [delSearchQuery, setDelSearchQuery] = useState('');
+  const [delStatus, setDelStatus] = useState('ALL');
+
+  // Users State
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [usrPage, setUsrPage] = useState(1);
+  const [usrPageSize, setUsrPageSize] = useState(10);
+  const [usrTotal, setUsrTotal] = useState(0);
+  const [usrTotalPages, setUsrTotalPages] = useState(0);
+  const [usrSearch, setUsrSearch] = useState('');
+  const [usrSearchQuery, setUsrSearchQuery] = useState('');
+  const [usrRole, setUsrRole] = useState('ALL');
+
+  // Stats State
+  const [stats, setStats] = useState({ totalDeliveries: 0, activeDeliveries: 0, totalBonusesPaid: 0, totalCo2Saved: 0 });
 
   // Fleet management states
-  const { fetchVehicles, addVehicle, removeVehicle } = useApp();
+  const { addVehicle, removeVehicle } = useApp();
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [newVehicle, setNewVehicle] = useState({ plate: '', model: '', type: 'Фура', capacity_kg: 20000 });
+  const [vehPage, setVehPage] = useState(1);
+  const [vehPageSize, setVehPageSize] = useState(10);
+  const [vehTotal, setVehTotal] = useState(0);
+  const [vehTotalPages, setVehTotalPages] = useState(0);
+  const [vehSearch, setVehSearch] = useState('');
+  const [vehSearchQuery, setVehSearchQuery] = useState('');
 
-  const fetchAdminData = async () => {
+  // Debounce search
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDelSearchQuery(delSearch);
+      setDelPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [delSearch]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setUsrSearchQuery(usrSearch);
+      setUsrPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [usrSearch]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setVehSearchQuery(vehSearch);
+      setVehPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [vehSearch]);
+
+  const fetchStats = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/deliveries/admin/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setStats(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchDeliveriesData = async () => {
     if (!token) return;
     setLoading(true);
     try {
-      // Fetch deliveries
-      const delRes = await fetch('/api/deliveries/admin/all', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (delRes.ok) {
-        const delData = await delRes.json();
-        setDeliveries(delData);
+      const skip = (delPage - 1) * delPageSize;
+      let url = `/api/deliveries/admin/all?skip=${skip}&limit=${delPageSize}`;
+      if (delSearchQuery) url += `&search=${encodeURIComponent(delSearchQuery)}`;
+      if (delStatus !== 'ALL') url += `&status=${delStatus}`;
+      
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setDeliveries(data.items || []);
+        setDelTotal(data.total || 0);
+        setDelTotalPages(data.pages || 0);
       }
-
-      // Fetch users
-      const userRes = await fetch('/api/users/admin/all', {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (userRes.ok) {
-        const userData = await userRes.json();
-        setUsers(userData);
-      }
-
-      // Fetch vehicles
-      const vehicleData = await fetchVehicles();
-      setVehicles(vehicleData);
     } catch (e) {
-      console.error("Error fetching admin dashboard data", e);
+      console.error(e);
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchUsersData = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const skip = (usrPage - 1) * usrPageSize;
+      let url = `/api/users/admin/all?skip=${skip}&limit=${usrPageSize}`;
+      if (usrSearchQuery) url += `&search=${encodeURIComponent(usrSearchQuery)}`;
+      if (usrRole !== 'ALL') url += `&role=${usrRole}`;
+      
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.items || []);
+        setUsrTotal(data.total || 0);
+        setUsrTotalPages(data.pages || 0);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadFleet = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const skip = (vehPage - 1) * vehPageSize;
+      let url = `/api/admin/fleet/vehicles?skip=${skip}&limit=${vehPageSize}`;
+      if (vehSearchQuery) url += `&search=${encodeURIComponent(vehSearchQuery)}`;
+      
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setVehicles(data.items || []);
+        setVehTotal(data.total || 0);
+        setVehTotalPages(data.pages || 0);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (subTab === 'deliveries') {
+      fetchDeliveriesData();
+      fetchStats();
+    }
+  }, [token, delPage, delPageSize, delSearchQuery, delStatus, subTab]);
+
+  useEffect(() => {
+    if (subTab === 'users') {
+      fetchUsersData();
+    }
+  }, [token, usrPage, usrPageSize, usrSearchQuery, usrRole, subTab]);
+
+  useEffect(() => {
+    if (subTab === 'fleet') {
+      loadFleet();
+    }
+  }, [token, vehPage, vehPageSize, vehSearchQuery, subTab]);
+
 
   const handleAddVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,25 +264,21 @@ export const AdminPanel: React.FC = () => {
     if (success) {
       setUpdateMsg('Автомобіль успішно додано!');
       setNewVehicle({ plate: '', model: '', type: 'Фура', capacity_kg: 20000 });
-      fetchAdminData();
+      loadFleet();
       setTimeout(() => setUpdateMsg(''), 4000);
     }
   };
 
   const handleRemoveVehicle = async (id: number) => {
-    if (window.confirm('Ви впевнені, що хочете видалити цей автомобіль?')) {
+    if (await showConfirm('Ви впевнені, що хочете видалити цей автомобіль?')) {
       const success = await removeVehicle(id);
       if (success) {
         setUpdateMsg('Автомобіль видалено');
-        fetchAdminData();
+        loadFleet();
         setTimeout(() => setUpdateMsg(''), 4000);
       }
     }
   };
-
-  useEffect(() => {
-    fetchAdminData();
-  }, [token]);
 
   const handleStatusChange = async (deliveryId: number, newStatus: string) => {
     try {
@@ -128,39 +293,15 @@ export const AdminPanel: React.FC = () => {
       if (res.ok) {
         setUpdateMsg(`Статус замовлення №${deliveryId} успішно змінено на "${newStatus}"!`);
         setTimeout(() => setUpdateMsg(''), 4000);
-        fetchAdminData();
+        fetchDeliveriesData();
+        fetchStats();
       } else {
-        alert('Не вдалося оновити статус.');
+        showAlert('Не вдалося оновити статус.');
       }
     } catch (e) {
       console.error(e);
     }
   };
-
-  // Analytics helper metrics
-  const totalDeliveries = deliveries.length;
-  const activeDeliveries = deliveries.filter(d => d.status !== 'Delivered').length;
-  const totalBonusesPaid = deliveries.reduce((acc, d) => acc + d.bonuses_earned, 0);
-  const totalCo2Saved = deliveries.reduce((acc, d) => {
-    // Економ зберігає більше CO2 порівняно з Експрес
-    const baseCo2 = d.weight * 0.42; 
-    return acc + Math.max(0, baseCo2 - d.co2_footprint);
-  }, 0);
-
-  // Filters and searches
-  const filteredDeliveries = deliveries.filter(del => {
-    const matchesSearch = 
-      del.id.toString().includes(searchTerm) ||
-      del.cargo_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      del.sender_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      del.receiver_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      del.origin_city.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      del.destination_city.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'ALL' || del.status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
 
   const getStatusLabelText = (status: string) => {
     switch (status) {
@@ -182,7 +323,7 @@ export const AdminPanel: React.FC = () => {
             <Icon name="package" size={24} />
           </div>
           <div>
-            <h3>{totalDeliveries}</h3>
+            <h3>{stats.totalDeliveries}</h3>
             <span>Усього відправлень</span>
           </div>
         </div>
@@ -192,7 +333,7 @@ export const AdminPanel: React.FC = () => {
             <Icon name="truck" size={24} />
           </div>
           <div>
-            <h3>{activeDeliveries}</h3>
+            <h3>{stats.activeDeliveries}</h3>
             <span>Активні доставки</span>
           </div>
         </div>
@@ -202,7 +343,7 @@ export const AdminPanel: React.FC = () => {
             <Icon name="gift" size={24} />
           </div>
           <div>
-            <h3>{Math.round(totalBonusesPaid)}</h3>
+            <h3>{Math.round(stats.totalBonusesPaid)}</h3>
             <span>Виплачено бонусів</span>
           </div>
         </div>
@@ -212,7 +353,7 @@ export const AdminPanel: React.FC = () => {
             <Icon name="leaf" size={24} />
           </div>
           <div>
-            <h3>{Math.round(totalCo2Saved)} кг</h3>
+            <h3>{Math.round(stats.totalCo2Saved)} кг</h3>
             <span>Сэкономлено CO₂</span>
           </div>
         </div>
@@ -246,11 +387,22 @@ export const AdminPanel: React.FC = () => {
             className={`sub-tab-link ${subTab === 'fleet' ? 'active' : ''}`}
             onClick={() => setSubTab('fleet')}
           >
-            <Icon name="activity" size={16} />
+            <Icon name="truck" size={16} />
             <span>Управління Автопарком</span>
           </button>
+          <button 
+            className={`sub-tab-link ${subTab === 'chat' ? 'active' : ''}`}
+            onClick={() => setSubTab('chat')}
+          >
+            <Icon name="message-circle" size={16} />
+            <span>Чат з клієнтами</span>
+          </button>
         </div>
-        <button className="btn-secondary refresh-btn" onClick={fetchAdminData} disabled={loading}>
+        <button className="btn-secondary refresh-btn" onClick={() => {
+          if(subTab === 'deliveries') { fetchDeliveriesData(); fetchStats(); }
+          if(subTab === 'users') fetchUsersData();
+          if(subTab === 'fleet') loadFleet();
+        }} disabled={loading}>
           <Icon name="refresh-cw" size={14} className={loading ? 'spinning' : ''} />
           <span>Оновити дані</span>
         </button>
@@ -266,13 +418,13 @@ export const AdminPanel: React.FC = () => {
                 <input
                   type="text"
                   placeholder="Пошук за ID, вантажем, містом..."
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  value={delSearch}
+                  onChange={e => setDelSearch(e.target.value)}
                   className="search-input"
                 />
                 <select
-                  value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
+                  value={delStatus}
+                  onChange={e => { setDelStatus(e.target.value); setDelPage(1); }}
                   className="status-filter-select"
                 >
                   <option value="ALL">Всі статуси</option>
@@ -300,7 +452,7 @@ export const AdminPanel: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredDeliveries.map(del => (
+                  {deliveries.map(del => (
                     <tr key={del.id}>
                       <td className="bold-text">#{del.id}</td>
                       <td>
@@ -328,7 +480,7 @@ export const AdminPanel: React.FC = () => {
                         <select
                           value={del.status}
                           onChange={e => handleStatusChange(del.id, e.target.value)}
-                          className="status-change-select"
+                          className="table-action-select"
                         >
                           <option value="Created">Створено</option>
                           <option value="Processing">Оформлення</option>
@@ -339,14 +491,26 @@ export const AdminPanel: React.FC = () => {
                       </td>
                     </tr>
                   ))}
-                  {filteredDeliveries.length === 0 && (
+                  {deliveries.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="empty-table-row">Доставок не знайдено.</td>
+                      <td colSpan={8} className="empty-table-row">{loading ? 'Завантаження...' : 'Доставок не знайдено.'}</td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {deliveries.length > 0 && (
+              <Pagination 
+                page={delPage} 
+                totalPages={delTotalPages} 
+                onPageChange={setDelPage} 
+                pageSize={delPageSize} 
+                onPageSizeChange={s => { setDelPageSize(s); setDelPage(1); }} 
+                totalItems={delTotal} 
+              />
+            )}
           </div>
         )}
 
@@ -354,6 +518,25 @@ export const AdminPanel: React.FC = () => {
           <div className="glass-card table-wrapper fade-in">
             <div className="table-header-controls">
               <h4>Реєстр зареєстрованих клієнтів</h4>
+              <div className="table-filters">
+                <input
+                  type="text"
+                  placeholder="Пошук за ID, ПІБ, Email..."
+                  value={usrSearch}
+                  onChange={e => setUsrSearch(e.target.value)}
+                  className="search-input"
+                />
+                <select
+                  value={usrRole}
+                  onChange={e => { setUsrRole(e.target.value); setUsrPage(1); }}
+                  className="status-filter-select"
+                >
+                  <option value="ALL">Всі ролі</option>
+                  <option value="customer">Клієнт</option>
+                  <option value="admin">Адміністратор</option>
+                  <option value="driver">Водій</option>
+                </select>
+              </div>
             </div>
 
             <div className="table-scroll-area">
@@ -395,9 +578,26 @@ export const AdminPanel: React.FC = () => {
                       </td>
                     </tr>
                   ))}
+                  {users.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="empty-table-row">{loading ? 'Завантаження...' : 'Користувачів не знайдено.'}</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+            
+            {/* Pagination Controls */}
+            {users.length > 0 && (
+              <Pagination 
+                page={usrPage} 
+                totalPages={usrTotalPages} 
+                onPageChange={setUsrPage} 
+                pageSize={usrPageSize} 
+                onPageSizeChange={s => { setUsrPageSize(s); setUsrPage(1); }} 
+                totalItems={usrTotal} 
+              />
+            )}
           </div>
         )}
 
@@ -432,6 +632,7 @@ export const AdminPanel: React.FC = () => {
                   <div className="input-group">
                     <label>Тип транспорту</label>
                     <select 
+                      className="status-filter-select"
                       value={newVehicle.type}
                       onChange={e => setNewVehicle({...newVehicle, type: e.target.value})}
                     >
@@ -461,6 +662,15 @@ export const AdminPanel: React.FC = () => {
             <div className="glass-card table-wrapper">
               <div className="table-header-controls">
                 <h4>Активний автопарк dandel.io</h4>
+                <div className="table-filters">
+                  <input
+                    type="text"
+                    placeholder="Пошук авто..."
+                    value={vehSearch}
+                    onChange={e => setVehSearch(e.target.value)}
+                    className="search-input"
+                  />
+                </div>
               </div>
               <div className="table-scroll-area">
                 <table className="admin-table">
@@ -505,8 +715,24 @@ export const AdminPanel: React.FC = () => {
                   </tbody>
                 </table>
               </div>
+              
+              {/* Pagination Controls */}
+              {vehicles.length > 0 && (
+                <Pagination 
+                  page={vehPage} 
+                  totalPages={vehTotalPages} 
+                  onPageChange={setVehPage} 
+                  pageSize={vehPageSize} 
+                  onPageSizeChange={s => { setVehPageSize(s); setVehPage(1); }} 
+                  totalItems={vehTotal} 
+                />
+              )}
             </div>
           </div>
+        )}
+
+        {subTab === 'chat' && (
+          <AdminChatPanel />
         )}
       </div>
     </div>

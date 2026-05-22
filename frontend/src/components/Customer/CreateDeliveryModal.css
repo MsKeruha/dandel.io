@@ -1,0 +1,89 @@
+.delivery-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26, 46, 32, 0.4);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.delivery-modal-content {
+  background: white;
+  width: 100%;
+  max-width: 1200px;
+  position: relative;
+  padding: 2rem;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 48px rgba(0,0,0,0.1);
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.delivery-modal-close {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  background: rgba(26, 46, 32, 0.05);
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--dandel-meadow-dark);
+  transition: all var(--transition-fast);
+  z-index: 10;
+}
+
+.delivery-modal-close:hover {
+  background: var(--dandel-danger-bg);
+  color: var(--dandel-danger-text);
+  transform: rotate(90deg);
+}
+
+.delivery-modal-header {
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  padding-right: 3rem; /* Для хрестика */
+}
+
+.delivery-modal-header h2 {
+  font-weight: 800;
+  color: var(--dandel-meadow-dark);
+  margin-bottom: 0.5rem;
+  font-size: 1.75rem;
+}
+
+.delivery-modal-header p {
+  color: var(--dandel-meadow-light);
+  font-size: 0.95rem;
+}
+
+.delivery-modal-body {
+  /* CriteriaSelector already handles its layout well, we just wrap it */
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

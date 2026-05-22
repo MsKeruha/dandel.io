@@ -2,25 +2,56 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import requests
 import os
-from typing import List
+from typing import List, Optional
+import math
 from database import get_db
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy import or_
 import models
 import schemas
 import routers.auth as auth
+import json
+from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/api/admin/fleet", tags=["Admin Fleet"])
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")
 
-@router.get("/vehicles", response_model=List[schemas.VehicleResponse])
+@router.get("/vehicles", response_model=schemas.PaginatedResponse[schemas.VehicleResponse])
 def get_all_vehicles(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    """Отримати весь список автомобілів компанії (Тільки для адмінів)."""
+    """Отримати весь список автомобілів компанії (Тільки для адмінів) з пагінацією."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Недостатньо прав для перегляду автопарку")
-    return db.query(models.Vehicle).all()
+        
+    query = db.query(models.Vehicle)
+    
+    if search:
+        search_term = f"%{search}%"
+        query = query.filter(
+            or_(
+                models.Vehicle.plate.ilike(search_term),
+                models.Vehicle.model.ilike(search_term),
+                models.Vehicle.type.ilike(search_term)
+            )
+        )
+        
+    total = query.count()
+    items = query.order_by(models.Vehicle.id.asc()).offset(skip).limit(limit).all()
+    pages = math.ceil(total / limit) if limit > 0 else 0
+
+    return {
+        "total": total,
+        "items": items,
+        "page": (skip // limit) + 1,
+        "size": limit,
+        "pages": pages
+    }
 
 @router.post("/vehicles", response_model=schemas.VehicleResponse)
 def add_vehicle(
@@ -61,16 +92,28 @@ def remove_vehicle(
     return {"message": "Автомобіль успішно видалено"}
 
 @router.get("/search-city", response_model=List[schemas.GeocodeResult])
-def search_city(q: str):
-    """Глобальний пошук міст через Nominatim (OpenStreetMap).
-    Більш доречно для логістики та не потребує API-ключів.
-    """
+def search_city(q: str, db: Session = Depends(get_db)):
+    """Глобальний пошук міст через Nominatim (OpenStreetMap) з серверним кешуванням на 7 днів."""
+    query_norm = q.lower().strip()
+    
+    # 1. Перевірка кешу в базі
+    cache_entry = db.query(models.CityCache).filter(models.CityCache.query == query_norm).first()
+    if cache_entry:
+        # Перевірка TTL (7 днів)
+        if datetime.utcnow() - cache_entry.updated_at < timedelta(days=7):
+            return json.loads(cache_entry.results_json)
+        else:
+            # Видаляємо старий кеш
+            db.delete(cache_entry)
+            db.commit()
+
+    # 2. Якщо в кеші немає або застаріло — йдемо в Nominatim
     url = "https://nominatim.openstreetmap.org/search"
     params = {
         "q": q,
         "format": "json",
         "addressdetails": 1,
-        "limit": 5,
+        "limit": 8,
         "accept-language": "uk"
     }
     headers = {
@@ -84,7 +127,6 @@ def search_city(q: str):
             results = []
             for item in data:
                 addr = item.get("address", {})
-                # Беремо назву міста або населеного пункту
                 city_name = addr.get("city") or addr.get("town") or addr.get("village") or addr.get("municipality") or item.get("display_name").split(",")[0]
                 
                 results.append({
@@ -94,8 +136,28 @@ def search_city(q: str):
                     "lat": float(item.get("lat")),
                     "lon": float(item.get("lon"))
                 })
+            
+            # 3. Зберігаємо в кеш
+            if results:
+                new_cache = models.CityCache(
+                    query=query_norm,
+                    results_json=json.dumps(results)
+                )
+                db.add(new_cache)
+                db.commit()
+                
             return results
         return []
     except Exception as e:
-        print(f"Geocoding error: {e}")
-        return []
+        print(f"Geocoding error: {e}. Використовуємо локальний fallback.")
+        # Локальний fallback для критичних міст при відсутності мережі
+        FALLBACK = [
+            {"name": "Київ", "country": "Україна", "lat": 50.4501, "lon": 30.5234},
+            {"name": "Львів", "country": "Україна", "lat": 49.8397, "lon": 24.0297},
+            {"name": "Одеса", "country": "Україна", "lat": 46.4825, "lon": 30.7233},
+            {"name": "Харків", "country": "Україна", "lat": 49.9935, "lon": 36.2304},
+            {"name": "Дніпро", "country": "Україна", "lat": 48.4647, "lon": 35.0462},
+            {"name": "Варшава", "country": "Польща", "lat": 52.2297, "lon": 21.0122},
+            {"name": "Берлін", "country": "Німеччина", "lat": 52.5200, "lon": 13.4050}
+        ]
+        return [c for c in FALLBACK if query_norm in c["name"].lower()]

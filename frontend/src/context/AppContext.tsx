@@ -6,6 +6,9 @@ export interface User {
   email: string;
   full_name: string;
   role: string;
+  phone?: string;
+  address?: string;
+  avatar_url?: string;
   bonuses_balance: number;
   loyalty_level: string;
 }
@@ -54,6 +57,7 @@ export interface Delivery {
   co2_footprint: number;
   bonuses_spent: number;
   bonuses_earned: number;
+  route_points?: [number, number][];
   created_at: string;
 }
 
@@ -92,6 +96,7 @@ interface AppContextType {
   chatMessages: ChatMessage[];
   currentCalculation: DeliveryCalculateResponse | null;
   loading: boolean;
+  isCalculating: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (email: string, fullName: string, password: string) => Promise<boolean>;
@@ -103,7 +108,8 @@ interface AppContextType {
     weight: number,
     value: number,
     isCrossBorder: boolean,
-    weights: { price: number; time: number; safety: number; eco: number }
+    weights: { price: number; time: number; safety: number; eco: number },
+    coords?: { origin: [number, number] | null; dest: [number, number] | null }
   ) => Promise<void>;
   createDelivery: (data: any) => Promise<Delivery | null>;
   fetchMyDeliveries: () => Promise<void>;
@@ -117,6 +123,8 @@ interface AppContextType {
   fetchVehicles: () => Promise<Vehicle[]>;
   addVehicle: (data: any) => Promise<boolean>;
   removeVehicle: (id: number) => Promise<boolean>;
+  updateProfile: (data: any) => Promise<boolean>;
+  uploadAvatar: (file: File) => Promise<boolean>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -131,6 +139,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [currentCalculation, setCurrentCalculation] = useState<DeliveryCalculateResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Створюємо заголовки для запитів з JWT токеном
@@ -246,12 +255,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const logout = () => {
-    localStorage.removeItem('dandel_token');
     setToken(null);
     setUser(null);
     setMyDeliveries([]);
     setChatMessages([]);
-    setCurrentCalculation(null);
+    localStorage.removeItem('dandel_token');
+  };
+
+  const updateProfile = async (data: any) => {
+    if (!token) return false;
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_URL}/api/users/me`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify(data)
+      });
+      if (res.ok) {
+        setUser(await res.json());
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uploadAvatar = async (file: File) => {
+    if (!token) return false;
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API_URL}/api/users/me/avatar`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+      if (res.ok) {
+        setUser(await res.json());
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error(err);
+      return false;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const calculateDelivery = async (
@@ -261,84 +317,161 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     weight: number,
     value: number,
     isCrossBorder: boolean,
-    weights: { price: number; time: number; safety: number; eco: number }
+    weights: { price: number; time: number; safety: number; eco: number },
+    coords?: { origin: [number, number] | null; dest: [number, number] | null }
   ) => {
-    setLoading(true);
-    setError(null);
+    const typeCoeffs: Record<string, number> = {
+      'Стандартний': 1.0, 'Крихкий': 1.4, 'Терморежим': 1.8, 'Великогабаритний': 2.2
+    };
+    const tcf = typeCoeffs[cargoType] || 1.0;
 
-    // Локальний SAW-розрахунок (використовується як fallback)
-    const runLocalCalculation = () => {
-      const CITIES_COORDS: Record<string, [number, number]> = {
-        'Київ': [50.4501, 30.5234], 'Львів': [49.8397, 24.0297],
-        'Одеса': [46.4825, 30.7233], 'Харків': [49.9935, 36.2304],
-        'Дніпро': [48.4647, 35.0462], 'Варшава': [52.2297, 21.0122],
-        'Берлін': [52.5200, 13.4050], 'Прага': [50.0755, 14.4378]
-      };
-      const start = CITIES_COORDS[origin] || [50.45, 30.52];
-      const end = CITIES_COORDS[dest] || [49.83, 24.02];
+    const getPrices = (distance: number) => ({
+      exp: (600 + distance * 22 + weight * 50) * tcf,
+      econ: (200 + distance * 6 + weight * 15) * tcf,
+      safe: (400 + distance * 12 + weight * 30) * tcf
+    });
+
+    if (currentCalculation && currentCalculation.origin === origin && currentCalculation.destination === dest) {
+      const start = coords?.origin || [50.45, 30.52];
+      const end = coords?.dest || [49.83, 24.02];
       const dist = Math.sqrt(Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2)) * 100;
+      const p = getPrices(dist);
 
-      const expPrice = 500 + dist * 18 + weight * 40;
-      const econPrice = 150 + dist * 4.5 + weight * 12;
-      const safePrice = 300 + dist * 10 + weight * 22;
-
-      // SAW: зважена сума за критеріями
       const calcSaw = (price: number, hours: number, safety: number, co2: number) => {
-        const maxPrice = Math.max(expPrice, econPrice, safePrice);
-        const maxHours = Math.max(dist / 85, dist / 40 + 12, dist / 55 + 2);
+        const totalWeight = (weights.price + weights.time + weights.safety + weights.eco) || 1;
+        const maxPrice = Math.max(p.exp, p.econ, p.safe) || 1;
+        const maxHours = Math.max(dist / 85, dist / 40 + 12, dist / 55 + 2) || 1;
+        const maxCo2 = (dist * 0.42 + 1) || 1;
+
         return (
-          weights.price * (1 - price / maxPrice) +
-          weights.time * (1 - hours / maxHours) +
-          weights.safety * (safety / 10) +
-          weights.eco * (1 - co2 / (dist * 0.42 + 1))
+          (weights.price / totalWeight) * (1 - price / maxPrice) +
+          (weights.time / totalWeight) * (1 - hours / maxHours) +
+          (weights.safety / totalWeight) * (safety / 10) +
+          (weights.eco / totalWeight) * (1 - co2 / maxCo2)
         );
       };
 
-      const scenarios: ScenarioDetails[] = [
-        {
-          scenario: 'Експрес',
-          price: Math.round(expPrice),
-          duration_hours: Math.round(dist / 85),
-          safety_score: 8.5,
-          co2_footprint: Math.round(dist * 0.42),
-          escort_available: false,
-          description: 'Швидка кур\'єрська доставка прямим сполученням.',
-          route_points: [start, [(start[0]+end[0])/2+0.1, (start[1]+end[1])/2+0.1], end],
-          saw_score: Math.round(calcSaw(expPrice, dist/85, 8.5, dist*0.42) * 100) / 100
-        },
-        {
-          scenario: 'Економ',
-          price: Math.round(econPrice),
-          duration_hours: Math.round(dist / 40 + 12),
-          safety_score: 7.0,
-          co2_footprint: Math.round(dist * 0.11),
-          escort_available: false,
-          description: 'Вигідна доставка збірного вантажу через сортувальні центри.',
-          route_points: [start, [(start[0]+end[0])/2+0.4, (start[1]+end[1])/2-0.5], end],
-          saw_score: Math.round(calcSaw(econPrice, dist/40+12, 7.0, dist*0.11) * 100) / 100
-        },
-        {
-          scenario: 'Безпечний',
-          price: Math.round(safePrice),
-          duration_hours: Math.round(dist / 55 + 2),
-          safety_score: 9.8,
-          co2_footprint: Math.round(dist * 0.21),
-          escort_available: true,
-          description: 'Маршрут в обхід воєнних ризиків. Додано фотозвіти на контрольних пунктах.',
-          route_points: [start, [(start[0]+end[0])/2-0.3, (start[1]+end[1])/2+0.3], end],
-          saw_score: Math.round(calcSaw(safePrice, dist/55+2, 9.8, dist*0.21) * 100) / 100
+      const updatedScenarios = currentCalculation.scenarios.map(sc => {
+        let newPrice = sc.scenario === 'Експрес' ? p.exp : sc.scenario === 'Економ' ? p.econ : p.safe;
+        return {
+          ...sc,
+          price: Math.round(newPrice),
+          saw_score: Math.round(calcSaw(newPrice, sc.duration_hours, sc.safety_score, sc.co2_footprint) * 100) / 100
+        };
+      });
+
+      setCurrentCalculation({
+        ...currentCalculation,
+        scenarios: updatedScenarios,
+        recommended_scenario: [...updatedScenarios].sort((a, b) => b.saw_score - a.saw_score)[0].scenario
+      });
+      return;
+    }
+
+    setIsCalculating(true);
+    setError(null);
+
+    const runLocalCalculation = async () => {
+      const start: [number, number] = coords?.origin || [50.45, 30.52];
+      const end: [number, number] = coords?.dest || [49.83, 24.02];
+      const dist = Math.sqrt(Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2)) * 100;
+      const p = getPrices(dist);
+
+      const generatePoints = async (s: [number, number], e: [number, number], mode: string): Promise<[number, number][]> => {
+        try {
+          let url = `https://router.project-osrm.org/route/v1/driving/${s[1]},${s[0]};${e[1]},${e[0]}?overview=full&geometries=geojson`;
+          if (mode === 'Економ') url += '&alternatives=true';
+
+          const response = await fetch(url);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.routes && data.routes.length > 0) {
+              const routeIdx = (mode === 'Економ' && data.routes.length > 1) ? 1 : 0;
+              let pts: [number, number][] = data.routes[routeIdx].geometry.coordinates.map((c: any) => [c[1], c[0]]);
+
+              if (mode === 'Безпечний') {
+                const globalRiskZones: [number, number][] = [[48.6, 36.8], [34.0, 44.0], [15.0, 45.0]];
+                pts = pts.map(p => {
+                  let adj = [...p];
+                  globalRiskZones.forEach(rz => {
+                    const d = Math.sqrt(Math.pow(p[0] - rz[0], 2) + Math.pow(p[1] - rz[1], 2));
+                    if (d < 2.5) {
+                      const push = (2.5 - d) * 0.6;
+                      adj[0] += (p[0] - rz[0] > 0 ? push : -push);
+                      adj[1] += (p[1] - rz[1] > 0 ? push : -push);
+                    }
+                  });
+                  return adj as [number, number];
+                });
+              }
+              return pts;
+            }
+          }
+        } catch (err) { console.warn('OSRM failed, using road-like fallback'); }
+
+        // Покращений fallback: якщо це маршрут Львів-Київ, використовуємо точки траси M06
+        const isLviv = Math.abs(s[0] - 49.83) < 0.1 && Math.abs(s[1] - 24.02) < 0.1;
+        const isKyiv = Math.abs(e[0] - 50.45) < 0.1 && Math.abs(e[1] - 30.52) < 0.1;
+
+        if (isLviv && isKyiv) {
+          // Статичний масив точок траси M06 (Львів -> Рівне -> Житомир -> Київ)
+          const m06_points: [number, number][] = [
+            [49.8397, 24.0297], [49.95, 24.50], [50.15, 25.15], 
+            [50.62, 26.25], [50.60, 27.20], [50.45, 27.90],
+            [50.25, 28.66], [50.35, 29.50], [50.45, 30.52]
+          ];
+
+          if (mode === 'Безпечний') {
+            return m06_points.map(p => [p[0] + 0.15, p[1] - 0.1]); // Невелика девіація для безпеки
+          }
+          if (mode === 'Економ') {
+            return [m06_points[0], [49.42, 26.98], [49.23, 28.46], m06_points[m06_points.length-1]]; // Через Хмельницький/Вінницю
+          }
+          return m06_points;
         }
+
+        // Загальний fallback (дуга замість прямої лінії)
+        const mid: [number, number] = [(s[0] + e[0]) / 2 + 0.2, (s[1] + e[1]) / 2 + 0.1];
+        return [s, mid, e];
+      };
+      const scenariosData = [
+        { scenario: 'Експрес', price: p.exp, hours: dist / 85, safety: 8.5, co2: dist * 0.42, desc: 'Прямий маршрут з пріоритетом швидкості.' },
+        { scenario: 'Економ', price: p.econ, hours: dist / 40 + 12, safety: 7.0, co2: dist * 0.11, desc: 'Маршрут через мережу хабів для мінімізації витрат.' },
+        { scenario: 'Безпечний', price: p.safe, hours: dist / 55 + 2, safety: 9.8, co2: dist * 0.21, desc: 'Маршрут з оминанням конфліктних та високоризикованих зон.' }
       ];
 
-      const sorted = scenarios.sort((a, b) => b.saw_score - a.saw_score);
-      setCurrentCalculation({
-        origin,
-        destination: dest,
-        scenarios: sorted,
-        recommended_scenario: sorted[0].scenario
-      });
-    };
+      const scenarios = await Promise.all(scenariosData.map(async (sc) => ({
+        scenario: sc.scenario,
+        price: Math.round(sc.price),
+        duration_hours: Math.round(sc.hours),
+        safety_score: sc.safety,
+        co2_footprint: Math.round(sc.co2),
+        escort_available: sc.scenario === 'Безпечний',
+        description: sc.desc,
+        route_points: await generatePoints(start, end, sc.scenario),
+        saw_score: 0
+      })));
 
+      const finalScenarios = scenarios.map(sc => {
+        const totalWeight = (weights.price + weights.time + weights.safety + weights.eco) || 1;
+        const maxPrice = Math.max(...scenarios.map(s => s.price)) || 1;
+        const maxHours = Math.max(...scenarios.map(s => s.duration_hours)) || 1;
+        const maxCo2 = Math.max(...scenarios.map(s => s.co2_footprint)) || 1;
+
+        return {
+          ...sc,
+          saw_score: Math.round((
+            (weights.price / totalWeight) * (1 - sc.price / maxPrice) +
+            (weights.time / totalWeight) * (1 - sc.duration_hours / maxHours) +
+            (weights.safety / totalWeight) * (sc.safety_score / 10) +
+            (weights.eco / totalWeight) * (1 - sc.co2_footprint / maxCo2)
+          ) * 100) / 100
+        };
+      });
+
+      const recommended = [...finalScenarios].sort((a, b) => b.saw_score - a.saw_score)[0].scenario;
+      setCurrentCalculation({ origin, destination: dest, scenarios: finalScenarios, recommended_scenario: recommended });
+    };
     try {
       const res = await fetch(`${API_URL}/api/deliveries/calculate`, {
         method: 'POST',
@@ -363,17 +496,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else {
         // Бекенд недоступний або повернув помилку — використовуємо локальний SAW
         console.warn('API помилка розрахунку, перемикання на локальний SAW.');
-        runLocalCalculation();
+        await runLocalCalculation();
       }
     } catch (e) {
       console.warn('Сервер недоступний. Використовуються локальні алгоритми МКВ.');
-      runLocalCalculation();
+      await runLocalCalculation();
     } finally {
       setLoading(false);
+      setIsCalculating(false);
     }
   };
 
-  const createDelivery = async (data: any): Promise<Delivery | null> => {
+  const createDelivery = async (data: any): Promise<{ delivery: Delivery | null, password?: string }> => {
     setLoading(true);
     setError(null);
     try {
@@ -384,16 +518,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       if (res.ok) {
-        const newDel = await res.json();
+        const responseData = await res.json();
+        
+        // Перевіряємо чи це гостьовий запис з автореєстрацією
+        if (responseData.token) {
+          localStorage.setItem('dandel_token', responseData.token.access_token);
+          setToken(responseData.token.access_token);
+          setUser(responseData.token.user);
+        }
+
+        const newDel = responseData.delivery || responseData;
         setMyDeliveries((prev) => [newDel, ...prev]);
-        fetchProfile(); // оновлюємо баланс бонусів
+        
+        if (token || responseData.token) {
+          fetchProfile(); // оновлюємо баланс бонусів
+        }
+        
         setLoading(false);
-        return newDel;
+        return { delivery: newDel, password: responseData.generated_password };
       } else {
         const errData = await res.json();
         setError(errData.detail || 'Не вдалося створити замовлення');
         setLoading(false);
-        return null;
+        return { delivery: null };
       }
     } catch (e) {
       console.warn('Сервер недоступний. Створення замовлення локально.');
@@ -614,7 +761,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return [];
     }
   };
-
   const fetchVehicles = async (): Promise<Vehicle[]> => {
     try {
       const res = await fetch(`${API_URL}/api/admin/fleet/vehicles`, {
@@ -680,7 +826,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         searchCities,
         fetchVehicles,
         addVehicle,
-        removeVehicle
+        removeVehicle,
+        updateProfile,
+        uploadAvatar
       }}
     >
       {children}

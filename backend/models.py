@@ -20,6 +20,9 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=False)
     role = Column(String, default="customer")  # customer, admin, driver
+    phone = Column(String, nullable=True)
+    avatar_url = Column(String, nullable=True)
+    address = Column(String, nullable=True)
     bonuses_balance = Column(Float, default=0.0)
     loyalty_level_id = Column(Integer, ForeignKey("loyalty_levels.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -48,8 +51,10 @@ class Delivery(Base):
     origin_city = Column(String, nullable=False)
     destination_city = Column(String, nullable=False)
     sender_name = Column(String, nullable=False)
+    sender_address = Column(String, nullable=True)
     receiver_name = Column(String, nullable=False)
     receiver_phone = Column(String, nullable=False)
+    receiver_address = Column(String, nullable=True)
     
     scenario = Column(String, nullable=False)  # Експрес (Швидко), Економ (Дешево), Безпечний
     escort_requested = Column(Boolean, default=False)  # супровід охоронною компанією
@@ -73,6 +78,20 @@ class Delivery(Base):
     sender = relationship("User", back_populates="deliveries")
     bonus_transactions = relationship("BonusTransaction", back_populates="delivery")
 
+    @property
+    def route_points(self):
+        try:
+            from routers.deliveries import get_route_data
+            return get_route_data(self.origin_city, self.destination_city, self.scenario)["points"]
+        except Exception:
+            try:
+                from routers.deliveries import CITIES_COORDS
+                start = CITIES_COORDS.get(self.origin_city, [50.4501, 30.5234])
+                end = CITIES_COORDS.get(self.destination_city, [49.8397, 24.0297])
+                return [start, end]
+            except Exception:
+                return [[50.4501, 30.5234], [49.8397, 24.0297]]
+
 class BonusTransaction(Base):
     __tablename__ = "bonus_transactions"
 
@@ -92,8 +111,9 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    sender_type = Column(String, nullable=False)  # customer, support, system
+    sender_type = Column(String, nullable=False)  # customer, support, system, admin
     content = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class Vehicle(Base):
@@ -109,3 +129,22 @@ class Vehicle(Base):
     status = Column(String, default="Available")  # Available, In_Transit, Maintenance, Offline
     
     last_updated = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class CityCache(Base):
+    __tablename__ = "city_cache"
+
+    id = Column(Integer, primary_key=True, index=True)
+    query = Column(String, unique=True, index=True, nullable=False)
+    results_json = Column(Text, nullable=False)  # JSON-encoded list of results
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+class RiskZone(Base):
+    __tablename__ = "risk_zones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    lat = Column(Float, nullable=False)
+    lng = Column(Float, nullable=False)
+    radius_km = Column(Float, nullable=False, default=50.0)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)

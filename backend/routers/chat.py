@@ -1,11 +1,13 @@
 import asyncio
 from typing import List
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
 from models import User, ChatMessage
 from schemas import ChatMessageCreate, ChatMessageResponse
 from routers.auth import get_current_user
+from fastapi import HTTPException
 
 router = APIRouter(
     prefix="/api/chat",
@@ -54,21 +56,33 @@ def send_chat_message(
     db.refresh(user_msg)
     
     # 2. Розумне автореагування (AI Triage)
-    text = message_in.content.lower()
+    text = message_in.content.strip()
     reply_content = ""
     
-    if "цін" in text or "вартіст" in text or "дорого" in text or "дешев" in text or "рахун" in text:
-        reply_content = "Розрахувати точну вартість доставки можна за допомогою нашого інтерактивного калькулятора! Завдяки науковому алгоритму SAW, система підбере оптимальний варіант (Економ, Експрес чи Безпечний) на основі ваших пріоритетів. 📊"
-    elif "безпек" in text or "охорон" in text or "супрові" in text or "війн" in text or "ризик" in text:
-        reply_content = "У dandel.io ми надзвичайно серйозно ставимося до безпеки. Сценарій 'Безпечний Шлях' прокладає маршрут в обхід зон бойових дій та небезпечних регіонів України. Також ви можете поставити галочку на 'Збройний супровід' — і наш партнер (охоронна компанія) супроводжуватиме ваш вантаж до місця призначення! 🛡️"
-    elif "бонус" in text or "акці" or "знижк" in text or "рівен" in text or "лояльн" in text:
-        reply_content = "У нас діє унікальна бонусна система! За кожну доставку ви отримуєте 5% кешбеку в бонусах (1 бонус = 1 грн). Бонуси накопичуються, підвищують ваш статус лояльності від 'Насіння' 🌱 до 'Золотої кульбаби' 🌼 і ними можна оплатити до 50% вартості наступних замовлень!"
-    elif "польщ" in text or "кордон" in text or "німеччин" in text or "чехі" in text or "за кордон" in text:
-        reply_content = "Ми здійснюємо як внутрішні перевезення по Україні, так і транскордонні рейси до Польщі, Німеччини та Чехії на власних автомобілях. Наш сервіс допомагає автоматично згенерувати супровідні митні документи при виборі закордонного напрямку! ✈️"
-    elif "машин" in text or "парк" in text or "авто" in text:
-        reply_content = "dandel.io здійснює доставку виключно власним автопарком та перевіреними водіями. У нас є легкі швидкісні мінівени для експрес-доставки та важкі тентовані вантажівки для збірних економ-вантажів. Всі машини обладнані GPS-трекерами. 🚚"
+    preset_answers = {
+        "Як працює безпечний тариф?": "У dandel.io ми надзвичайно серйозно ставимося до безпеки. Сценарій 'Безпечний Шлях' прокладає маршрут в обхід зон бойових дій та небезпечних регіонів України. Також ви можете поставити галочку на 'Збройний супровід' — і наш партнер (охоронна компанія) супроводжуватиме ваш вантаж до місця призначення! 🛡️",
+        "Як списати бонуси кульбаби?": "У нас діє унікальна бонусна система! За кожну доставку ви отримуєте 5% кешбеку в бонусах (1 бонус = 1 грн). Бонуси накопичуються, підвищують ваш статус лояльності від 'Насіння' 🌱 до 'Золотої кульбаби' 🌼 і ними можна оплатити до 50% вартості наступних замовлень!",
+        "Доставка за кордон (Польща/Німеччина)": "Ми здійснюємо як внутрішні перевезення по Україні, так і транскордонні рейси до Польщі, Німеччини та Чехії на власних автомобілях. Наш сервіс допомагає автоматично згенерувати супровідні митні документи при виборі закордонного напрямку! ✈️",
+        "Які машини є у вашому автопарку?": "dandel.io здійснює доставку виключно власним автопарком та перевіреними водіями. У нас є легкі швидкісні мінівени для експрес-доставки та важкі тентовані вантажівки для збірних економ-вантажів. Всі машини обладнані GPS-трекерами. 🚚"
+    }
+    
+    if text in preset_answers:
+        reply_content = preset_answers[text]
     else:
-        reply_content = "Дякую за повідомлення! Насіннячко вашого питання вже передано нашій команді підтримки. Оператор відповість вам протягом кількох хвилин. Поки ви чекаєте, рекомендуємо скористатися нашим МКВ калькулятором для підбору найкращої доставки! 🌾"
+        # Check if we should auto-reply or just wait for operator
+        # For a simple implementation, if there is a pending operator request, don't spam.
+        # Let's just always send "connecting" for any non-preset text for now, but we don't want to spam it if they send 5 messages.
+        # Actually, let's just send the connection message once.
+        last_support_msgs = db.query(ChatMessage).filter(
+            ChatMessage.user_id == current_user.id,
+            ChatMessage.sender_type == "support"
+        ).order_by(ChatMessage.created_at.desc()).limit(1).all()
+        
+        if last_support_msgs and "Підключаю оператора" in last_support_msgs[0].content:
+            # Don't send another auto-reply if we already said we are connecting an operator
+            return user_msg
+            
+        reply_content = "Підключаю оператора. Будь ласка, зачекайте хвилину, зараз вам дадуть відповідь..."
 
     support_msg = ChatMessage(
         user_id=current_user.id,
@@ -79,3 +93,89 @@ def send_chat_message(
     db.commit()
     
     return user_msg
+
+class AdminMessageCreate(BaseModel):
+    user_id: int
+    content: str
+
+@router.get("/admin/chats")
+def admin_get_chats(
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    """Отримати список всіх унікальних користувачів, які писали в чат."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    users_with_chats = db.query(User).join(ChatMessage, User.id == ChatMessage.user_id).distinct().all()
+    
+    chats = []
+    for u in users_with_chats:
+        # Отримуємо останнє повідомлення для відображення
+        last_msg = db.query(ChatMessage).filter(ChatMessage.user_id == u.id).order_by(ChatMessage.created_at.desc()).first()
+        
+        # Перевіряємо чи є непрочитані повідомлення від клієнта
+        unread_count = db.query(ChatMessage).filter(
+            ChatMessage.user_id == u.id,
+            ChatMessage.sender_type == "customer",
+            ChatMessage.is_read == False
+        ).count()
+        
+        chats.append({
+            "user_id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "last_message": last_msg.content if last_msg else "",
+            "last_message_date": last_msg.created_at if last_msg else None,
+            "unread": unread_count > 0
+        })
+        
+    chats.sort(key=lambda x: x["last_message_date"], reverse=True)
+    return chats
+
+@router.get("/admin/messages/{user_id}", response_model=List[ChatMessageResponse])
+def admin_get_user_messages(
+    user_id: int,
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    messages = db.query(ChatMessage).filter(
+        ChatMessage.user_id == user_id
+    ).order_by(ChatMessage.created_at.asc()).all()
+    
+    # Відмічаємо повідомлення клієнта як прочитані
+    unread_messages = db.query(ChatMessage).filter(
+        ChatMessage.user_id == user_id,
+        ChatMessage.sender_type == "customer",
+        ChatMessage.is_read == False
+    ).all()
+    
+    if unread_messages:
+        for msg in unread_messages:
+            msg.is_read = True
+        db.commit()
+    
+    return messages
+
+@router.post("/admin/messages", response_model=ChatMessageResponse)
+def admin_send_message(
+    message_in: AdminMessageCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+        
+    support_msg = ChatMessage(
+        user_id=message_in.user_id,
+        sender_type="support",
+        content=message_in.content
+    )
+    db.add(support_msg)
+    db.commit()
+    db.refresh(support_msg)
+    
+    return support_msg

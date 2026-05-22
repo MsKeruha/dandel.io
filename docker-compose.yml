@@ -37,6 +37,14 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "until python -c 'import socket, os; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(1); s.connect((os.getenv(\"DB_HOST\", \"db\"), int(os.getenv(\"DB_PORT\", 5432))))' 2>/dev/null; do echo 'Waiting for database...'; sleep 1; done && 
+      echo 'Database is ready!' && 
+      alembic upgrade head && 
+      python seed.py && 
+      uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
   frontend:
     build: ./frontend
@@ -44,10 +52,15 @@ services:
     restart: always
     environment:
       - VITE_API_TARGET=http://backend:8000
+      # Вмикаємо опитування файлів для Windows (Hot Reload в Docker)
+      - CHOKIDAR_USEPOLLING=true
     depends_on:
       - backend
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
 
 volumes:
   dandel_db_data:

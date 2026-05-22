@@ -6,6 +6,48 @@
   position: relative;
 }
 
+#leaflet-map.map-calculating {
+  filter: blur(4px);
+  pointer-events: none;
+  transition: filter var(--transition-normal);
+}
+
+.map-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  animation: overlayFadeIn 0.3s ease forwards;
+}
+
+.loader-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.loader-content p {
+  color: var(--dandel-meadow-dark);
+  font-weight: 700;
+  font-size: 0.95rem;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+}
+
+@keyframes overlayFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .map-header {
   background: var(--dandel-puff-dark);
   padding: 1rem 1.25rem;

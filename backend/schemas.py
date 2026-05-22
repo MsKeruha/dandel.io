@@ -14,9 +14,17 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+
 class UserResponse(UserBase):
     id: int
     role: str
+    phone: Optional[str] = None
+    avatar_url: Optional[str] = None
+    address: Optional[str] = None
     bonuses_balance: float
     loyalty_level: str
     created_at: datetime
@@ -55,6 +63,7 @@ class ChatMessageResponse(ChatMessageBase):
     id: int
     user_id: int
     sender_type: str  # customer, support, system
+    is_read: bool = False
     created_at: datetime
 
     class Config:
@@ -65,6 +74,10 @@ class ChatMessageResponse(ChatMessageBase):
 class DeliveryCalculateRequest(BaseModel):
     origin_city: str
     destination_city: str
+    origin_lat: float
+    origin_lng: float
+    destination_lat: float
+    destination_lng: float
     cargo_type: str  # Стандартний, Крихкий, Терморежим, Великогабаритний
     weight: float = Field(..., gt=0)
     declared_value: float = Field(..., ge=0)
@@ -104,8 +117,10 @@ class DeliveryCreate(BaseModel):
     origin_city: str
     destination_city: str
     sender_name: str
+    sender_address: str
     receiver_name: str
     receiver_phone: str
+    receiver_address: str
     scenario: str  # Експрес, Економ, Безпечний
     escort_requested: bool = False
     use_bonuses: bool = False  # чи списувати доступні бонуси користувача
@@ -122,8 +137,43 @@ class DeliveryResponse(BaseModel):
     origin_city: str
     destination_city: str
     sender_name: str
+    sender_address: Optional[str] = None
     receiver_name: str
     receiver_phone: str
+    receiver_address: Optional[str] = None
+    scenario: str
+    escort_requested: bool
+    photo_proof: Optional[str] = None
+    status: str
+    current_lat: Optional[float] = None
+    current_lng: Optional[float] = None
+    price: float
+    duration_hours: float
+    safety_score: float
+    co2_footprint: float
+    bonuses_spent: float
+    bonuses_earned: float
+    route_points: Optional[List[List[float]]] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class AdminDeliveryResponse(BaseModel):
+    id: int
+    sender_id: int
+    cargo_name: str
+    cargo_type: str
+    weight: float
+    declared_value: float
+    is_cross_border: bool
+    origin_city: str
+    destination_city: str
+    sender_name: str
+    sender_address: Optional[str] = None
+    receiver_name: str
+    receiver_phone: str
+    receiver_address: Optional[str] = None
     scenario: str
     escort_requested: bool
     photo_proof: Optional[str] = None
@@ -140,6 +190,11 @@ class DeliveryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class DeliveryGuestResponse(BaseModel):
+    delivery: DeliveryResponse
+    token: Optional[Token] = None
+    generated_password: Optional[str] = None
 
 
 # Схеми для рівнів лояльності
@@ -180,3 +235,27 @@ class GeocodeResult(BaseModel):
     state: Optional[str] = None
     lat: float
     lon: float
+
+# Схеми для зон ризику
+class RiskZoneResponse(BaseModel):
+    id: int
+    name: str
+    lat: float
+    lng: float
+    radius_km: float
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+from typing import TypeVar, Generic
+
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    total: int
+    items: List[T]
+    page: int
+    size: int
+    pages: int
+

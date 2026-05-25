@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from database import get_db
-from models import User, BonusTransaction
-from schemas import UserResponse, BonusTransactionResponse, LoyaltyLevelResponse, PaginatedResponse, UserUpdate
+from models import User, BonusTransaction, Delivery
+from schemas import UserResponse, BonusTransactionResponse, LoyaltyLevelResponse, PaginatedResponse, UserUpdate, AdminDriverResponse
 from routers.auth import get_current_user
 import uuid
 
@@ -34,6 +34,11 @@ def update_me(
         current_user.phone = user_update.phone
     if user_update.address is not None:
         current_user.address = user_update.address
+    if hasattr(user_update, 'avatar_url') and user_update.avatar_url is not None:
+        current_user.avatar_url = user_update.avatar_url
+    if user_update.password is not None and user_update.password.strip() != "":
+        from routers.auth import get_password_hash
+        current_user.hashed_password = get_password_hash(user_update.password)
         
     db.commit()
     db.refresh(current_user)
@@ -84,6 +89,78 @@ def get_loyalty_levels(
 ):
     from models import LoyaltyLevel
     return db.query(LoyaltyLevel).order_by(LoyaltyLevel.min_bonuses.asc()).all()
+
+
+@router.get("/admin/drivers", response_model=PaginatedResponse[AdminDriverResponse])
+def admin_get_all_drivers(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    search: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Доступ заборонено")
+    
+    query = db.query(User).filter(User.role == "driver")
+
+    if search:
+        search_term = f"%{search}%"
+        if search.isdigit():
+            query = query.filter(
+                or_(
+                    User.id == int(search),
+                    User.email.ilike(search_term),
+                    User.full_name.ilike(search_term),
+                    User.phone.ilike(search_term)
+                )
+            )
+        else:
+            query = query.filter(
+                or_(
+                    User.email.ilike(search_term),
+                    User.full_name.ilike(search_term),
+                    User.phone.ilike(search_term)
+                )
+            )
+
+    query = query.order_by(User.id.asc())
+    
+    total = query.count()
+    users = query.offset(skip).limit(limit).all()
+    pages = math.ceil(total / limit) if limit > 0 else 0
+
+    result = []
+    for u in users:
+        active_deliveries = db.query(Delivery).filter(
+            Delivery.driver_id == u.id,
+            Delivery.status.in_(["Created", "Processing", "In_Transit", "Customs"])
+        ).all()
+        
+        result.append({
+            "id": u.id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "phone": u.phone,
+            "status": "Active" if len(active_deliveries) > 0 else "Available",
+            "active_deliveries": [
+                {
+                    "id": d.id,
+                    "cargo_name": d.cargo_name,
+                    "origin_city": d.origin_city,
+                    "destination_city": d.destination_city,
+                    "status": d.status
+                } for d in active_deliveries
+            ]
+        })
+
+    return {
+        "total": total,
+        "items": result,
+        "page": (skip // limit) + 1,
+        "size": limit,
+        "pages": pages
+    }
 
 
 @router.get("/admin/all", response_model=PaginatedResponse[UserResponse])

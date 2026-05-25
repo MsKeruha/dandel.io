@@ -18,6 +18,8 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
     address: Optional[str] = None
+    avatar_url: Optional[str] = None
+    password: Optional[str] = None
 
 class UserResponse(UserBase):
     id: int
@@ -159,6 +161,7 @@ class DeliveryResponse(BaseModel):
     bonuses_earned: float
     route_points: Optional[List[List[float]]] = None
     created_at: datetime
+    driver_id: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -195,6 +198,9 @@ class AdminDeliveryResponse(BaseModel):
     bonuses_spent: float
     bonuses_earned: float
     created_at: datetime
+    driver_id: Optional[int] = None
+    driver_name: Optional[str] = None
+    driver_phone: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -203,6 +209,28 @@ class DeliveryGuestResponse(BaseModel):
     delivery: DeliveryResponse
     token: Optional[Token] = None
     generated_password: Optional[str] = None
+
+
+class DriverDeliveryInfo(BaseModel):
+    id: int
+    cargo_name: str
+    origin_city: str
+    destination_city: str
+    status: str
+    
+    class Config:
+        from_attributes = True
+
+class AdminDriverResponse(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    phone: Optional[str] = None
+    status: str = "Active"
+    active_deliveries: List[DriverDeliveryInfo] = []
+    
+    class Config:
+        from_attributes = True
 
 
 # Схеми для рівнів лояльності
@@ -250,6 +278,7 @@ class VehicleResponse(VehicleBase):
 # Схеми для геокодування
 class GeocodeResult(BaseModel):
     name: str
+    full_address: Optional[str] = None
     country: str
     state: Optional[str] = None
     lat: float

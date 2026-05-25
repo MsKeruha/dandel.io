@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import { useOverlay } from '../../context/OverlayContext';
 import Icon from '../common/Icon';
 import CustomSelect from '../common/CustomSelect';
+import { createPortal } from 'react-dom';
 import { AdminChatPanel } from './AdminChatPanel';
 import './AdminPanel.css';
 
@@ -16,8 +17,10 @@ interface AdminDelivery {
   origin_city: string;
   destination_city: string;
   sender_name: string;
+  sender_address?: string;
   receiver_name: string;
   receiver_phone: string;
+  receiver_address?: string;
   scenario: string;
   escort_requested: boolean;
   status: string;
@@ -35,9 +38,11 @@ interface AdminDelivery {
     id: number;
     cargo_name: string;
     origin_city: string;
-    destination_city: string;
     status: string;
   };
+  driver_id?: number;
+  driver_name?: string;
+  driver_phone?: string;
 }
 
 interface AdminUser {
@@ -110,7 +115,7 @@ export const AdminPanel: React.FC = () => {
   const { token } = useApp();
   const { showAlert, showConfirm } = useOverlay();
   
-  const [subTab, setSubTab] = useState<'deliveries' | 'users' | 'analytics' | 'fleet' | 'chat'>('deliveries');
+  const [subTab, setSubTab] = useState<'deliveries' | 'users' | 'analytics' | 'fleet' | 'chat' | 'drivers'>('deliveries');
   const [updateMsg, setUpdateMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -123,6 +128,10 @@ export const AdminPanel: React.FC = () => {
   const [delSearch, setDelSearch] = useState('');
   const [delSearchQuery, setDelSearchQuery] = useState('');
   const [delStatus, setDelStatus] = useState('ALL');
+  const [chatSelectedDelivery, setChatSelectedDelivery] = useState<number | null>(null);
+
+  // Стейт для модального вікна деталей
+  const [detailsDelivery, setDetailsDelivery] = useState<AdminDelivery | null>(null);
 
   // Users State
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -148,6 +157,25 @@ export const AdminPanel: React.FC = () => {
   const [vehSearch, setVehSearch] = useState('');
   const [vehSearchQuery, setVehSearchQuery] = useState('');
 
+  // Drivers State
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [drvPage, setDrvPage] = useState(1);
+  const [drvPageSize, setDrvPageSize] = useState(10);
+  const [drvTotal, setDrvTotal] = useState(0);
+  const [drvTotalPages, setDrvTotalPages] = useState(0);
+  const [drvSearch, setDrvSearch] = useState('');
+  const [drvSearchQuery, setDrvSearchQuery] = useState('');
+  const [allDrivers, setAllDrivers] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (token) {
+      fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/users/admin/drivers?skip=0&limit=100`, { headers: { 'Authorization': `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(d => setAllDrivers(d.items || []))
+        .catch(e => console.error(e));
+    }
+  }, [token]);
+
   // Debounce search
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -172,6 +200,14 @@ export const AdminPanel: React.FC = () => {
     }, 500);
     return () => clearTimeout(handler);
   }, [vehSearch]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDrvSearchQuery(drvSearch);
+      setDrvPage(1);
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [drvSearch]);
 
   const fetchStats = async () => {
     if (!token) return;
@@ -255,6 +291,28 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  const loadDrivers = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const skip = (drvPage - 1) * drvPageSize;
+      let url = `/api/users/admin/drivers?skip=${skip}&limit=${drvPageSize}`;
+      if (drvSearchQuery) url += `&search=${encodeURIComponent(drvSearchQuery)}`;
+      
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setDrivers(data.items || []);
+        setDrvTotal(data.total || 0);
+        setDrvTotalPages(data.pages || 0);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (subTab === 'deliveries') {
       fetchDeliveriesData();
@@ -273,6 +331,12 @@ export const AdminPanel: React.FC = () => {
       loadFleet();
     }
   }, [token, vehPage, vehPageSize, vehSearchQuery, subTab]);
+
+  useEffect(() => {
+    if (subTab === 'drivers') {
+      loadDrivers();
+    }
+  }, [token, drvPage, drvPageSize, drvSearchQuery, subTab]);
 
 
   const handleAddVehicle = async (e: React.FormEvent) => {
@@ -298,6 +362,9 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleStatusChange = async (deliveryId: number, newStatus: string) => {
+    // Оптимістичне оновлення для миттєвої реакції
+    setDeliveries(prev => prev.map(d => d.id === deliveryId ? { ...d, status: newStatus } : d));
+    
     try {
       const res = await fetch(`/api/deliveries/admin/${deliveryId}/status`, {
         method: 'PUT',
@@ -310,13 +377,16 @@ export const AdminPanel: React.FC = () => {
       if (res.ok) {
         setUpdateMsg(`Статус замовлення №${deliveryId} успішно змінено на "${newStatus}"!`);
         setTimeout(() => setUpdateMsg(''), 4000);
-        fetchDeliveriesData();
+        // Не викликаємо fetchDeliveriesData() відразу, щоб уникнути блимання (вона сама оновиться пізніше)
         fetchStats();
       } else {
         showAlert('Не вдалося оновити статус.');
+        fetchDeliveriesData(); // Відкочуємо оптимістичне оновлення
       }
     } catch (e) {
       console.error(e);
+      showAlert('Помилка з\'єднання з сервером.');
+      fetchDeliveriesData(); // Відкочуємо оптимістичне оновлення
     }
   };
 
@@ -416,6 +486,13 @@ export const AdminPanel: React.FC = () => {
             <span>Управління Автопарком</span>
           </button>
           <button 
+            className={`sub-tab-link ${subTab === 'drivers' ? 'active' : ''}`}
+            onClick={() => setSubTab('drivers')}
+          >
+            <Icon name="users" size={16} />
+            <span>Реєстр водіїв</span>
+          </button>
+          <button 
             className={`sub-tab-link ${subTab === 'chat' ? 'active' : ''}`}
             onClick={() => setSubTab('chat')}
           >
@@ -427,6 +504,7 @@ export const AdminPanel: React.FC = () => {
           if(subTab === 'deliveries') { fetchDeliveriesData(); fetchStats(); }
           if(subTab === 'users') fetchUsersData();
           if(subTab === 'fleet') loadFleet();
+          if(subTab === 'drivers') loadDrivers();
         }} disabled={loading}>
           <Icon name="refresh-cw" size={14} className={loading ? 'spinning' : ''} />
           <span>Оновити дані</span>
@@ -476,6 +554,7 @@ export const AdminPanel: React.FC = () => {
                     <th>Ціна</th>
                     <th>Терміни</th>
                     <th>Статус</th>
+                    <th>Деталі</th>
                     <th>Змінити статус</th>
                   </tr>
                 </thead>
@@ -509,6 +588,16 @@ export const AdminPanel: React.FC = () => {
                         </span>
                       </td>
                       <td>
+                        <button 
+                          className="btn-secondary" 
+                          onClick={() => setDetailsDelivery(del)}
+                          style={{ padding: '6px', minWidth: '40px' }}
+                          title="Переглянути деталі"
+                        >
+                          <Icon name="eye" size={16} />
+                        </button>
+                      </td>
+                      <td>
                         <div style={{ width: '150px' }}>
                           <CustomSelect
                             value={del.status}
@@ -517,7 +606,7 @@ export const AdminPanel: React.FC = () => {
                               { value: 'Created', label: 'Створено' },
                               { value: 'Processing', label: 'Оформлення' },
                               { value: 'In_Transit', label: 'В дорозі' },
-                              { value: 'Customs', label: 'Митниця' },
+                              ...(del.is_cross_border ? [{ value: 'Customs', label: 'Митниця' }] : []),
                               { value: 'Delivered', label: 'Доставлено' }
                             ]}
                           />
@@ -527,7 +616,7 @@ export const AdminPanel: React.FC = () => {
                   ))}
                   {deliveries.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="empty-table-row">{loading ? 'Завантаження...' : 'Доставок не знайдено.'}</td>
+                      <td colSpan={10} className="empty-table-row">{loading ? 'Завантаження...' : 'Доставок не знайдено.'}</td>
                     </tr>
                   )}
                 </tbody>
@@ -778,6 +867,192 @@ export const AdminPanel: React.FC = () => {
         {subTab === 'chat' && (
           <AdminChatPanel />
         )}
+
+        {subTab === 'drivers' && (
+          <div className="glass-card table-wrapper fade-in">
+            <div className="table-header-controls">
+              <h4>Реєстр водіїв</h4>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  placeholder="Пошук водіїв..."
+                  value={drvSearch}
+                  onChange={e => setDrvSearch(e.target.value)}
+                  className="search-input"
+                />
+              </div>
+            </div>
+            <div className="table-scroll-area">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>ПІБ</th>
+                    <th>Email</th>
+                    <th>Телефон</th>
+                    <th>Статус</th>
+                    <th>Активні завдання</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {drivers.map(drv => (
+                    <tr key={drv.id}>
+                      <td className="bold-text">{drv.full_name}</td>
+                      <td>{drv.email}</td>
+                      <td className="bold-text highlight-gold">{drv.phone || 'Не вказано'}</td>
+                      <td>
+                        <span className={`status-pill ${drv.status === 'Active' ? 'processing' : 'created'}`}>
+                          {drv.status === 'Active' ? 'На рейсі' : 'Вільний'}
+                        </span>
+                      </td>
+                      <td>
+                        {drv.active_deliveries.length > 0 ? (
+                          drv.active_deliveries.map((d: any) => (
+                            <div key={d.id} style={{ marginBottom: '4px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.05)', padding: '6px', borderRadius: '6px' }}>
+                              <strong>#{d.id} {d.cargo_name}</strong><br/>
+                              {d.origin_city} → {d.destination_city} ({getStatusLabelText(d.status)})
+                            </div>
+                          ))
+                        ) : (
+                          <span className="muted-text">Немає завдань</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {drivers.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="empty-table-row">Водіїв не знайдено.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {drivers.length > 0 && (
+              <Pagination 
+                page={drvPage} 
+                totalPages={drvTotalPages} 
+                onPageChange={setDrvPage} 
+                pageSize={drvPageSize} 
+                onPageSizeChange={s => { setDrvPageSize(s); setDrvPage(1); }} 
+                totalItems={drvTotal} 
+              />
+            )}
+          </div>
+        )}
+
+        {/* Modal for Delivery Details */}
+        {detailsDelivery && createPortal(
+          <div className="modal-backdrop fade-in" style={{
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 100000,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              backdropFilter: 'blur(10px)'
+          }}>
+            <div className="glass-card" style={{
+                width: '90%', maxWidth: '600px', padding: '2.5rem', borderRadius: '20px',
+                border: '1px solid var(--dandel-gold)', background: 'rgba(15, 20, 16, 0.98)',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.8)', maxHeight: '90vh', overflowY: 'auto',
+                color: 'white', position: 'relative', animation: 'scaleIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <Icon name="file-text" size={24} color="var(--dandel-gold)" />
+                        <h3 style={{ margin: 0, color: 'white', fontSize: '1.4rem' }}>Деталі доставки #{detailsDelivery.id}</h3>
+                    </div>
+                    <button className="btn-secondary" onClick={() => setDetailsDelivery(null)} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.05)', border: 'none', borderRadius: '50%', cursor: 'pointer', color: '#fff', width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Icon name="x" size={18} />
+                    </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div style={{ background: 'rgba(255,255,255,0.04)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--dandel-gold)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                            <Icon name="user" size={16} /> Відправник
+                        </h4>
+                        <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem' }}><strong>ПІБ:</strong> {detailsDelivery.sender_name}</p>
+                        <p style={{ margin: '0', fontSize: '0.9rem' }}><strong>Адреса:</strong> {detailsDelivery.sender_address || detailsDelivery.origin_city}</p>
+                    </div>
+                    
+                    <div style={{ background: 'rgba(255,255,255,0.04)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--dandel-gold)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                            <Icon name="users" size={16} /> Отримувач
+                        </h4>
+                        <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem' }}><strong>ПІБ:</strong> {detailsDelivery.receiver_name}</p>
+                        <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem' }}><strong>Телефон:</strong> {detailsDelivery.receiver_phone}</p>
+                        <p style={{ margin: '0', fontSize: '0.9rem' }}><strong>Адреса:</strong> {detailsDelivery.receiver_address || detailsDelivery.destination_city}</p>
+                    </div>
+                </div>
+
+                <div style={{ background: 'rgba(255,255,255,0.04)', padding: '15px', borderRadius: '12px', marginBottom: '20px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <h4 style={{ margin: '0 0 10px 0', color: 'var(--dandel-green)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                        <Icon name="package" size={16} /> Деталі вантажу
+                    </h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.9rem' }}>
+                        <p style={{ margin: '0' }}><strong>Назва:</strong> {detailsDelivery.cargo_name}</p>
+                        <p style={{ margin: '0' }}><strong>Тип:</strong> {detailsDelivery.cargo_type}</p>
+                        <p style={{ margin: '0' }}><strong>Вага:</strong> {detailsDelivery.weight} кг</p>
+                        <p style={{ margin: '0' }}><strong>Оголошена вартість:</strong> {detailsDelivery.declared_value} грн</p>
+                    </div>
+                </div>
+
+                {/* Управління призначеним водієм */}
+                <div style={{ background: 'rgba(255,255,255,0.04)', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <h4 style={{ margin: '0 0 12px 0', color: '#00e676', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem' }}>
+                        <Icon name="truck" size={16} /> Призначення екіпажу/водія
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <div style={{ flex: 1 }}>
+                                <CustomSelect
+                                    value={detailsDelivery.driver_id ? String(detailsDelivery.driver_id) : ''}
+                                    onChange={async (val) => {
+                                        const newDriverId = val ? Number(val) : null;
+                                        try {
+                                            const res = await fetch(`${import.meta.env.VITE_API_BASE_URL || ''}/api/deliveries/admin/${detailsDelivery.id}/status`, {
+                                                method: 'PUT',
+                                                headers: {
+                                                    'Content-Type': 'application/json',
+                                                    'Authorization': `Bearer ${token}`
+                                                },
+                                                body: JSON.stringify({ driver_id: newDriverId })
+                                            });
+                                            if (res.ok) {
+                                                const updated = await res.json();
+                                                setDetailsDelivery(prev => prev ? { ...prev, driver_id: updated.driver_id, driver_name: updated.driver_name, driver_phone: updated.driver_phone } : null);
+                                                fetchDeliveriesData();
+                                                setUpdateMsg('Водія успішно перепризначено!');
+                                                setTimeout(() => setUpdateMsg(''), 3000);
+                                            } else {
+                                                showAlert('Не вдалося призначити водія');
+                                            }
+                                        } catch (err) {
+                                            showAlert('Помилка при призначенні водія');
+                                        }
+                                    }}
+                                    options={[
+                                        { value: '', label: '-- Оберіть водія для рейсу --' },
+                                        ...allDrivers.map((d: any) => ({
+                                            value: String(d.id),
+                                            label: `${d.full_name} (${d.phone || 'без телефону'})`
+                                        }))
+                                    ]}
+                                    icon="user"
+                                />
+                            </div>
+                        </div>
+                        {detailsDelivery.driver_name ? (
+                            <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.7)', marginTop: '5px' }}>
+                                <span>Поточний водій: <strong>{detailsDelivery.driver_name}</strong> {detailsDelivery.driver_phone && `(${detailsDelivery.driver_phone})`}</span>
+                            </div>
+                        ) : (
+                            <div style={{ fontSize: '0.85rem', color: 'var(--dandel-danger-text)', marginTop: '5px' }}>
+                                ⚠️ <strong>Екіпаж не призначено!</strong> Рейс не з'явиться в кабінеті водія.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+          </div>
+        , document.body)}
       </div>
     </div>
   );

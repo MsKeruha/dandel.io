@@ -5,16 +5,18 @@ services:
     image: postgres:15-alpine
     container_name: dandel_db
     restart: always
+    env_file:
+      - ./backend/.env
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ot.postgre
-      POSTGRES_DB: dandelion
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-ot.postgre}
+      POSTGRES_DB: ${DB_NAME:-dandelion}
     ports:
       - "5432:5432"
     volumes:
       - dandel_db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d dandelion"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-dandelion}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -23,15 +25,10 @@ services:
     build: ./backend
     container_name: dandel_backend
     restart: always
+    env_file:
+      - ./backend/.env
     environment:
-      - DB_USER=postgres
-      - DB_PASSWORD=ot.postgre
-      - DB_NAME=dandelion
       - DB_HOST=db
-      - DB_PORT=5432
-      - SECRET_KEY=dandel_super_secret_secure_key_2026_dandelion
-      - ALGORITHM=HS256
-      - ACCESS_TOKEN_EXPIRE_MINUTES=1440
     depends_on:
       db:
         condition: service_healthy
@@ -46,21 +43,59 @@ services:
       python seed.py && 
       uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
 
+  redis:
+    image: redis:7-alpine
+    container_name: dandel_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+  celery_worker:
+    build: ./backend
+    container_name: dandel_celery_worker
+    restart: always
+    command: celery -A celery_app.celery worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      - DB_HOST=db
+      - C_FORCE_ROOT=true
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  celery_beat:
+    build: ./backend
+    container_name: dandel_celery_beat
+    restart: always
+    command: celery -A celery_app.celery beat --loglevel=info
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      - DB_HOST=db
+      - C_FORCE_ROOT=true
+    depends_on:
+      - celery_worker
+
   frontend:
     build: ./frontend
     container_name: dandel_frontend
     restart: always
+    env_file:
+      - ./frontend/.env
     environment:
-      - VITE_API_TARGET=http://backend:8000
-      # Вмикаємо опитування файлів для Windows (Hot Reload в Docker)
-      - CHOKIDAR_USEPOLLING=true
+      - VITE_API_TARGET=http://localhost:8000
     depends_on:
       - backend
     ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "5173:80"  # Mapping host port 5173 to container's Nginx port 80
 
 volumes:
   dandel_db_data:
+

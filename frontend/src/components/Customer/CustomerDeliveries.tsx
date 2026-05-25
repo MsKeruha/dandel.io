@@ -9,32 +9,38 @@ export const CustomerDeliveries: React.FC = () => {
 
   const trackedDelivery = myDeliveries.find(d => d.id === trackedDeliveryId);
 
+  const getSafeDate = (dateString?: string) => {
+    if (!dateString) return new Date();
+    let ds = dateString;
+    if (!ds.endsWith('Z')) ds += 'Z';
+    return new Date(ds);
+  };
+
   const getDynamicStatus = (del: any) => {
     if (del.status?.toLowerCase() === 'cancelled') return 'Cancelled';
-    
-    const created = new Date(del.created_at || Date.now()).getTime();
-    const now = Date.now();
-    const elapsedHours = (now - created) / (1000 * 60 * 60);
-    const totalHours = del.duration_hours || 24;
-    
-    if (elapsedHours >= totalHours) return 'Delivered';
-    if (elapsedHours >= totalHours * 0.8 && del.is_cross_border) return 'Customs';
-    if (elapsedHours >= totalHours * 0.3) return 'In_Transit';
-    if (elapsedHours >= totalHours * 0.1) return 'Processing';
-    return 'Created';
+    return del.status || 'Created';
   };
 
   const getDynamicLocation = (del: any) => {
     if (del.status?.toLowerCase() === 'cancelled') return null;
+    if (del.current_lat && del.current_lng) return [del.current_lat, del.current_lng];
+
     const status = getDynamicStatus(del);
     if (status === 'Delivered') return del.route_points?.[del.route_points.length - 1] || null;
     
-    const created = new Date(del.created_at || Date.now()).getTime();
+    const created = getSafeDate(del.created_at).getTime();
     const now = Date.now();
     const elapsedHours = (now - created) / (1000 * 60 * 60);
     const totalHours = del.duration_hours || 24;
     
-    const progress = Math.min(Math.max(elapsedHours / totalHours, 0), 1);
+    let baseProgress = Math.min(Math.max(elapsedHours / totalHours, 0), 1);
+    
+    // Adjust progress based on manual status override
+    let progress = baseProgress;
+    if (status === 'Created') progress = Math.min(baseProgress, 0.2);
+    else if (status === 'Processing') progress = Math.max(0.2, Math.min(baseProgress, 0.4));
+    else if (status === 'In_Transit') progress = Math.max(0.4, Math.min(baseProgress, 0.8));
+    else if (status === 'Customs') progress = Math.max(0.8, Math.min(baseProgress, 0.95));
     
     if (progress === 0 || !del.route_points || del.route_points.length < 2) return null;
     
@@ -70,13 +76,13 @@ export const CustomerDeliveries: React.FC = () => {
 
   const formatDateTime = (dateString?: string) => {
     if (!dateString) return 'Невідомо';
-    const d = new Date(dateString);
+    const d = getSafeDate(dateString);
     return d.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
   const getStatusProgress = (status: string) => {
     const map: Record<string, number> = {
-      'Created': 10,
+      'Created': 0,
       'Processing': 30,
       'In_Transit': 60,
       'Customs': 80,
@@ -146,7 +152,7 @@ export const CustomerDeliveries: React.FC = () => {
                 <p>Тариф: «{trackedDelivery.scenario}» | Вантаж: {trackedDelivery.cargo_name}</p>
                 <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#666', display: 'flex', gap: '2rem' }}>
                   <span><Icon name="calendar" size={14} /> <strong>Прийнято:</strong> {formatDateTime(trackedDelivery.created_at)}</span>
-                  <span><Icon name="clock" size={14} /> <strong>Очікується:</strong> {formatDateTime(new Date(new Date(trackedDelivery.created_at || Date.now()).getTime() + (trackedDelivery.duration_hours || 24) * 60 * 60 * 1000).toISOString())}</span>
+                  <span><Icon name="clock" size={14} /> <strong>Очікується:</strong> {formatDateTime(new Date(getSafeDate(trackedDelivery.created_at).getTime() + (trackedDelivery.duration_hours || 24) * 60 * 60 * 1000).toISOString())}</span>
                 </div>
               </div>
             </div>
@@ -186,6 +192,35 @@ export const CustomerDeliveries: React.FC = () => {
                 )}
                 <span className={`point-label ${getDynamicStatus(trackedDelivery) === 'Delivered' ? 'active' : ''}`}>Доставлено</span>
               </div>
+            </div>
+
+            <div className="delivery-details-section" style={{ marginTop: '20px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px' }}>
+                <div>
+                    <h5 style={{ margin: '0 0 10px 0', color: 'var(--dandel-gold)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Icon name="user" size={16} /> Відправник
+                    </h5>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem' }}><strong>ПІБ:</strong> {trackedDelivery.sender_name}</p>
+                    <p style={{ margin: '0', fontSize: '0.9rem' }}><strong>Адреса:</strong> {trackedDelivery.sender_address || trackedDelivery.origin_city}</p>
+                </div>
+                <div>
+                    <h5 style={{ margin: '0 0 10px 0', color: 'var(--dandel-gold)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Icon name="users" size={16} /> Отримувач
+                    </h5>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem' }}><strong>ПІБ:</strong> {trackedDelivery.receiver_name}</p>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem' }}><strong>Телефон:</strong> {trackedDelivery.receiver_phone}</p>
+                    <p style={{ margin: '0', fontSize: '0.9rem' }}><strong>Адреса:</strong> {trackedDelivery.receiver_address || trackedDelivery.destination_city}</p>
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                    <h5 style={{ margin: '0 0 10px 0', color: 'var(--dandel-green)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Icon name="package" size={16} /> Деталі вантажу
+                    </h5>
+                    <div style={{ display: 'flex', gap: '15px', fontSize: '0.9rem', flexWrap: 'wrap' }}>
+                        <span style={{ background: 'rgba(255,255,255,0.05)', padding: '5px 10px', borderRadius: '8px' }}><strong>Тип:</strong> {trackedDelivery.cargo_type}</span>
+                        <span style={{ background: 'rgba(255,255,255,0.05)', padding: '5px 10px', borderRadius: '8px' }}><strong>Вага:</strong> {trackedDelivery.weight} кг</span>
+                        <span style={{ background: 'rgba(255,255,255,0.05)', padding: '5px 10px', borderRadius: '8px' }}><strong>Оголошена вартість:</strong> {trackedDelivery.declared_value} грн</span>
+                        {trackedDelivery.escort_requested && <span style={{ background: 'rgba(217, 83, 79, 0.2)', color: '#d9534f', padding: '5px 10px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}><Icon name="shield" size={14} /> Збройна охорона</span>}
+                    </div>
+                </div>
             </div>
           </div>
         ) : (

@@ -29,7 +29,7 @@ class User(Base):
 
     # Зв'язки
     loyalty_level_obj = relationship("LoyaltyLevel")
-    deliveries = relationship("Delivery", back_populates="sender", cascade="all, delete-orphan")
+    deliveries = relationship("Delivery", back_populates="sender", foreign_keys="[Delivery.sender_id]", cascade="all, delete-orphan")
     bonus_transactions = relationship("BonusTransaction", back_populates="user", cascade="all, delete-orphan")
 
     @property
@@ -79,9 +79,11 @@ class Delivery(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     vehicle_id = Column(Integer, ForeignKey("vehicles.id"), nullable=True)
+    driver_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     # Зв'язки
-    sender = relationship("User", back_populates="deliveries")
+    sender = relationship("User", back_populates="deliveries", foreign_keys=[sender_id])
+    driver = relationship("User", foreign_keys=[driver_id])
     bonus_transactions = relationship("BonusTransaction", back_populates="delivery")
     vehicle = relationship("Vehicle", back_populates="deliveries")
 
@@ -92,6 +94,14 @@ class Delivery(Base):
             return get_route_data([self.origin_lat, self.origin_lng], [self.destination_lat, self.destination_lng], self.scenario)["points"]
         except Exception:
             return [[self.origin_lat, self.origin_lng], [self.destination_lat, self.destination_lng]]
+
+    @property
+    def driver_name(self) -> str | None:
+        return self.driver.full_name if self.driver else None
+
+    @property
+    def driver_phone(self) -> str | None:
+        return self.driver.phone if self.driver else None
 
 class BonusTransaction(Base):
     __tablename__ = "bonus_transactions"

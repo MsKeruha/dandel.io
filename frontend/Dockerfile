@@ -1,16 +1,25 @@
-FROM node:20-alpine
+# Стейдж 1: Збірка React-додатку (Vite)
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Копируем файлы зависимостей
+# Копіюємо файли залежностей та встановлюємо їх
 COPY package*.json ./
 RUN npm install
 
-# Копируем код
+# Копіюємо код та збираємо продакшн-бандл
 COPY . .
+RUN npm run build
 
-# Экспортируем порт Vite
-EXPOSE 5173
+# Стейдж 2: Роздача статики через Nginx
+FROM nginx:alpine
 
-# Запуск в режиме разработки для быстрой правки (или можно сменить на build + serve)
-CMD ["npm", "run", "dev", "--", "--host"]
+# Копіюємо кастомний конфіг Nginx (для підтримки React Router)
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Копіюємо зібрані файли зі стейджу 1
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

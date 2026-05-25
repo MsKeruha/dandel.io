@@ -10,6 +10,7 @@ import BonusSystem from './components/Dashboard/BonusSystem';
 import RouteMap from './components/Map/RouteMap';
 import AdminPanel from './components/Admin/AdminPanel';
 import CustomerDeliveries from './components/Customer/CustomerDeliveries';
+import DriverPanel from './components/Driver/DriverPanel';
 import './App.css';
 
 const DashboardContent: React.FC = () => {
@@ -27,7 +28,7 @@ const DashboardContent: React.FC = () => {
 
   const { showAlert } = useOverlay();
 
-  const [activeTab, setActiveTab] = useState<'home' | 'profile' | 'bonuses' | 'chat' | 'admin'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'profile' | 'deliveries' | 'bonuses' | 'chat' | 'admin' | 'driver'>('home');
   const [showLogin, setShowLogin] = useState(false);
   const [showDeliveryModal, setShowDeliveryModal] = useState(false);
 
@@ -54,6 +55,12 @@ const DashboardContent: React.FC = () => {
       setShowLogin(false);
     }
   }, [token]);
+
+  useEffect(() => {
+    if (token && user?.role === 'driver') {
+      setActiveTab('driver');
+    }
+  }, [token, user]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +118,7 @@ const DashboardContent: React.FC = () => {
       return;
     }
     setActiveTab(tab);
-    if (tab === 'profile') {
+    if (tab === 'profile' || tab === 'deliveries') {
       fetchMyDeliveries();
     }
   };
@@ -214,7 +221,7 @@ const DashboardContent: React.FC = () => {
         <button 
           className="btn-accent" 
           onClick={() => setShowDeliveryModal(true)}
-          style={{ padding: '0.6rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap', borderRadius: 'calc(var(--radius-md) - 0.25rem)', marginLeft: 'auto', marginRight: '0.5rem' }}
+          style={{ padding: '1rem 1rem', fontSize: '0.85rem', whiteSpace: 'nowrap', borderRadius: 'calc(var(--radius-md) - 0.25rem)', marginLeft: 'auto', marginRight: '0.5rem' }}
         >
           <Icon name="plus-circle" size={16} /> Оформити доставку
         </button>
@@ -250,6 +257,15 @@ const DashboardContent: React.FC = () => {
               <Icon name="settings" size={16} /> Адмін-панель
             </button>
           )}
+
+          {user?.role === 'driver' && (
+            <button
+              className={`tab-link ${activeTab === 'driver' ? 'active' : ''}`}
+              onClick={() => setActiveTab('driver')}
+            >
+              <Icon name="truck" size={16} /> Кабінет водія
+            </button>
+          )}
         </nav>
 
         {/* Профіль користувача або кнопка входу */}
@@ -273,7 +289,7 @@ const DashboardContent: React.FC = () => {
                 onClick={() => setActiveTab('bonuses')}
                 title="Ваш баланс бонусів"
               >
-                <Icon name="gift" size={14} /> {user.bonuses_balance}
+                <Icon name="gift" size={14} /> {typeof user.bonuses_balance === 'number' ? user.bonuses_balance.toFixed(2) : user.bonuses_balance}
               </button>
 
               <button
@@ -343,6 +359,8 @@ const DashboardContent: React.FC = () => {
         {activeTab === 'chat' && <SupportChat />}
 
         {activeTab === 'admin' && user?.role === 'admin' && <AdminPanel />}
+
+        {activeTab === 'driver' && user?.role === 'driver' && <DriverPanel />}
       </main>
 
       {/* Футер */}

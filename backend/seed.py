@@ -147,16 +147,34 @@ def seed_data(reset=False):
         )
         db.add(admin_user)
 
-        # 3. Створюємо елітного водія доставки dandel.io
+        # 3. Створюємо елітного водія доставки dandel.io та ще 14 водіїв для пагінації
+        drivers_to_add = []
         driver_user = models.User(
             email="driver@dandel.io",
             full_name="Андрій Колісник",
             hashed_password=get_password_hash("driverpass123"),
             role="driver",
+            phone="+380671112233",
             bonuses_balance=0.0,
             loyalty_level_id=db_levels["Насіння"].id
         )
-        db.add(driver_user)
+        drivers_to_add.append(driver_user)
+        
+        for i in range(14):
+            email = f"driver{i+1}@dandel.io"
+            name = UKRAINIAN_NAMES[i % len(UKRAINIAN_NAMES)] + f" {i+1}"
+            u = models.User(
+                email=email,
+                full_name=name,
+                hashed_password=get_password_hash("driverpass123"),
+                role="driver",
+                phone=f"+38067{random.randint(1000000, 9999999)}",
+                bonuses_balance=0.0,
+                loyalty_level_id=db_levels["Насіння"].id
+            )
+            drivers_to_add.append(u)
+            
+        db.add_all(drivers_to_add)
 
         # 4. Створюємо кілька інших випадкових клієнтів
         other_users = []
@@ -254,7 +272,7 @@ def seed_data(reset=False):
             "co2_footprint": 18.2,
             "bonuses_spent": 50.0,
             "bonuses_earned": 22.5,
-            "photo_proof": PHOTO_PROOFS[0]
+            "photo_proof": None
         },
         {
             "cargo_name": "Серверне обладнання Dell R740",
@@ -300,12 +318,14 @@ def seed_data(reset=False):
             "co2_footprint": 4.5, # Дуже екологічний та дешевий
             "bonuses_spent": 0.0,
             "bonuses_earned": 9.0,
-            "photo_proof": PHOTO_PROOFS[1]
+            "photo_proof": None
         }
     ]
 
     all_seeded_deliveries = []
     available_vehicles = db.query(models.Vehicle).all()
+
+    driver_users = db.query(models.User).filter_by(role="driver").all()
 
     # Додаємо демо-доставки
     if should_seed_deliveries:
@@ -336,7 +356,8 @@ def seed_data(reset=False):
                 bonuses_earned=dd["bonuses_earned"],
                 photo_proof=dd["photo_proof"],
                 created_at=datetime.datetime.utcnow() - datetime.timedelta(days=random.randint(1, 10)),
-                vehicle_id=random.choice(available_vehicles).id if available_vehicles else None
+                vehicle_id=random.choice(available_vehicles).id if available_vehicles else None,
+                driver_id=random.choice(driver_users).id if driver_users else None
             )
             db.add(d)
             db.flush()
@@ -396,7 +417,7 @@ def seed_data(reset=False):
                     co2_footprint=round(co2, 2),
                     bonuses_spent=0.0,
                     bonuses_earned=round(price * 0.05, 2),
-                    photo_proof=random.choice(PHOTO_PROOFS) if status == "Delivered" else None
+                    photo_proof=None
                 )
                 
                 # Корегуємо дату створення під поточний статус
@@ -413,6 +434,8 @@ def seed_data(reset=False):
                     d.created_at = now - datetime.timedelta(hours=duration * random.uniform(0.01, 0.05))
                     
                 d.vehicle_id = random.choice(available_vehicles).id if available_vehicles and status in ["In_Transit", "Processing", "Created"] else None
+                if status != "Cancelled" and random.random() < 0.6:
+                    d.driver_id = random.choice(driver_users).id if driver_users else None
                 db.add(d)
                 db.flush()
                 all_seeded_deliveries.append(d)

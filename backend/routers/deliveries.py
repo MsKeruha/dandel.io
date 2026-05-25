@@ -18,31 +18,7 @@ router = APIRouter(
     tags=["Deliveries & Calculations"]
 )
 
-def update_dynamic_statuses(db: Session):
-    deliveries = db.query(Delivery).filter(Delivery.status.notin_(['Delivered', 'Cancelled'])).all()
-    for deliv in deliveries:
-        if not deliv.created_at or not deliv.duration_hours:
-            continue
-            
-        now = datetime.datetime.utcnow()
-        elapsed = (now - deliv.created_at.replace(tzinfo=None)).total_seconds() / 3600.0
-        total_h = deliv.duration_hours
-        
-        if elapsed >= total_h:
-            deliv.status = 'Delivered'
-            # Звільняємо авто
-            if deliv.vehicle_id:
-                veh = db.query(Vehicle).filter(Vehicle.id == deliv.vehicle_id).first()
-                if veh:
-                    veh.status = 'Available'
-        elif elapsed >= total_h * 0.8 and deliv.is_cross_border:
-            deliv.status = 'Customs'
-        elif elapsed >= total_h * 0.3:
-            deliv.status = 'In_Transit'
-        elif elapsed >= total_h * 0.1:
-            deliv.status = 'Processing'
-    
-    db.commit()
+# Статуси тепер оновлюються автоматично у фоновому режимі через Celery періодично (це забезпечує стабільну роботу)
 
 # Допоміжна функція для розрахунку відстані (формула Гаверсинуса)
 def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -53,8 +29,13 @@ def calculate_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
+_ROUTE_CACHE = {}
+
 # Допоміжна функція для отримання маршруту, відстані та часу з OSRM
 def get_route_data(start: List[float], end: List[float], scenario: str):
+    cache_key = f"{start[0]},{start[1]}_{end[0]},{end[1]}_{scenario}"
+    if cache_key in _ROUTE_CACHE:
+        return _ROUTE_CACHE[cache_key]
     
     # Визначаємо проміжні точки для створення різних маршрутів
     waypoints = f"{start[1]},{start[0]}"
@@ -98,16 +79,41 @@ def get_route_data(start: List[float], end: List[float], scenario: str):
                 result["points"] = pts
                 result["distance"] = route["distance"] / 1000.0 # в км
                 result["duration"] = route["duration"] / 3600.0 # в годинах
+                _ROUTE_CACHE[cache_key] = result
     except Exception as e:
         print(f"OSRM Error: {e}")
         
     return result
 
+def update_simulated_coords(delivery, start_c, end_c, progress):
+    pts = delivery.route_points
+    if pts and len(pts) >= 2:
+        total_segments = len(pts) - 1
+        exact_index = progress * total_segments
+        floor_idx = int(exact_index)
+        remainder = exact_index - floor_idx
+        if floor_idx >= total_segments:
+            delivery.current_lat = pts[-1][0]
+            delivery.current_lng = pts[-1][1]
+        else:
+            p1 = pts[floor_idx]
+            p2 = pts[floor_idx + 1]
+            delivery.current_lat = p1[0] + (p2[0] - p1[0]) * remainder
+            delivery.current_lng = p1[1] + (p2[1] - p1[1]) * remainder
+    else:
+        delivery.current_lat = start_c[0] + (end_c[0] - start_c[0]) * progress
+        delivery.current_lng = start_c[1] + (end_c[1] - start_c[1]) * progress
+
 @router.get("/risk-zones", response_model=List[RiskZoneResponse])
 def get_risk_zones(db: Session = Depends(get_db)):
     return db.query(RiskZone).filter(RiskZone.is_active == True).all()
 
-@router.post("/calculate", response_model=DeliveryCalculateResponse)
+@router.post(
+    "/calculate", 
+    response_model=DeliveryCalculateResponse,
+    summary="Розрахунок вартості доставки",
+    description="Обчислює доступні тарифи (Економ, Експрес, Безпечний) на основі алгоритму SAW та OSRM."
+)
 def calculate_options(req: DeliveryCalculateRequest):
     start_coords = [req.origin_lat, req.origin_lng]
     end_coords = [req.destination_lat, req.destination_lng]
@@ -235,7 +241,12 @@ def calculate_options(req: DeliveryCalculateRequest):
     )
 
 
-@router.post("/create", response_model=DeliveryGuestResponse)
+@router.post(
+    "/create", 
+    response_model=DeliveryGuestResponse,
+    summary="Оформити нову доставку",
+    description="Створює замовлення на доставку, застосовує бонуси та автоматично підбирає вільне авто та водія."
+)
 def create_delivery(
     order_in: DeliveryCreate, 
     db: Session = Depends(get_db), 
@@ -277,28 +288,30 @@ def create_delivery(
         access_token = create_access_token(data={"sub": current_user.email})
         token_data = Token(access_token=access_token, token_type="bearer", user=current_user)
 
-    # Отримуємо маршрут для збереження координат
+    # Отримуємо реальний маршрут OSRM
     start_coords = [order_in.origin_lat, order_in.origin_lng]
     end_coords = [order_in.destination_lat, order_in.destination_lng]
     
-    distance = calculate_distance(start_coords[0], start_coords[1], end_coords[0], end_coords[1])
+    route_data = get_route_data(start_coords, end_coords, order_in.scenario)
+    distance = route_data["distance"]
     if distance < 1.0:
         distance = 1.0
+    osrm_duration = route_data["duration"]
 
-    # Спрощений підрахунок вартості
+    # Спрощений підрахунок вартості на основі OSRM
     if order_in.scenario == "Експрес":
         price = 500.0 + (distance * 18.0) + (order_in.weight * 40.0) + (order_in.declared_value * 0.01)
-        time_h = max(3.0, distance / 85.0)
+        time_h = max(3.0, osrm_duration * 0.9 + 1.0)
         safety = 8.5
         co2 = distance * 0.42 + (order_in.weight * 0.15)
     elif order_in.scenario == "Економ":
         price = 150.0 + (distance * 4.5) + (order_in.weight * 12.0) + (order_in.declared_value * 0.005)
-        time_h = max(18.0, distance / 40.0) + 12.0
+        time_h = max(18.0, osrm_duration * 1.5 + 12.0)
         safety = 7.0
         co2 = distance * 0.11 + (order_in.weight * 0.03)
     else:  # Безпечний
         price = 300.0 + (distance * 10.0) + (order_in.weight * 22.0) + (order_in.declared_value * 0.008)
-        time_h = max(8.0, distance / 55.0) + 2.0
+        time_h = max(8.0, osrm_duration * 1.2 + 2.0)
         safety = 9.8
         co2 = distance * 0.21 + (order_in.weight * 0.07)
         if order_in.escort_requested:
@@ -372,6 +385,12 @@ def create_delivery(
         vehicle_id = vehicle.id
         vehicle.status = "In_Transit"
 
+    # Шукаємо доступного водія (перевагу віддаємо першому водію driver@dandel.io)
+    driver_user = db.query(User).filter(User.role == "driver").filter(User.email == "driver@dandel.io").first()
+    if not driver_user:
+        driver_user = db.query(User).filter(User.role == "driver").first()
+    driver_id = driver_user.id if driver_user else None
+
     new_delivery = Delivery(
         sender_id=current_user.id,
         cargo_name=order_in.cargo_name,
@@ -389,6 +408,7 @@ def create_delivery(
         receiver_name=order_in.receiver_name,
         receiver_phone=order_in.receiver_phone,
         sender_address=order_in.sender_address,
+        receiver_address=order_in.receiver_address,
         scenario=order_in.scenario,
         escort_requested=order_in.escort_requested,
         status="Created",
@@ -400,7 +420,8 @@ def create_delivery(
         co2_footprint=co2,
         bonuses_spent=bonuses_to_spend,
         bonuses_earned=bonuses_earned,
-        vehicle_id=vehicle_id
+        vehicle_id=vehicle_id,
+        driver_id=driver_id
     )
     
     # Додаємо координати відправлення
@@ -432,7 +453,6 @@ def get_my_deliveries(
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
-    update_dynamic_statuses(db)
     return db.query(Delivery).filter(Delivery.sender_id == current_user.id).order_by(Delivery.created_at.desc()).all()
 
 
@@ -471,8 +491,7 @@ def simulate_delivery_step(
         
         # Симулюємо переміщення координат
         progress = next_idx / (len(status_flow) - 1)
-        delivery.current_lat = start_c[0] + (end_c[0] - start_c[0]) * progress
-        delivery.current_lng = start_c[1] + (end_c[1] - start_c[1]) * progress
+        update_simulated_coords(delivery, start_c, end_c, progress)
         
         # Для безпечного типу генеруємо лінк на фото контролю (насіння на вітрі / вантаж у дорозі!)
         if next_status == "In_Transit":
@@ -526,8 +545,6 @@ def admin_get_all_deliveries(
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Доступ заборонено")
         
-    update_dynamic_statuses(db)
-    
     query = db.query(Delivery)
 
     if status and status != "ALL":
@@ -586,7 +603,7 @@ def admin_get_all_deliveries(
 @router.put("/admin/{delivery_id}/status", response_model=DeliveryResponse)
 def admin_update_delivery_status(
     delivery_id: int,
-    status_data: Dict[str, str],
+    status_data: Dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -612,8 +629,7 @@ def admin_update_delivery_status(
         
         if new_status in status_flow:
             progress = status_flow.index(new_status) / (len(status_flow) - 1)
-            delivery.current_lat = start_c[0] + (end_c[0] - start_c[0]) * progress
-            delivery.current_lng = start_c[1] + (end_c[1] - start_c[1]) * progress
+            update_simulated_coords(delivery, start_c, end_c, progress)
             
         if new_status == "In_Transit":
             delivery.photo_proof = "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80"
@@ -622,7 +638,106 @@ def admin_update_delivery_status(
         elif new_status == "Delivered":
             delivery.photo_proof = "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=600&q=80"
             
+    if "driver_id" in status_data:
+        driver_id = status_data.get("driver_id")
+        delivery.driver_id = driver_id
+        
     db.commit()
     db.refresh(delivery)
     return delivery
+
+
+import os
+import uuid
+from fastapi import UploadFile, File
+from fastapi.responses import FileResponse
+
+# Створимо директорію для доказів доставки, якщо немає
+os.makedirs("data/proofs", exist_ok=True)
+
+@router.get("/driver/active", response_model=List[DeliveryResponse])
+def get_driver_deliveries(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "driver":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки водіям")
+    return db.query(Delivery).filter(Delivery.driver_id == current_user.id).order_by(Delivery.created_at.desc()).all()
+
+@router.put("/driver/{delivery_id}/status", response_model=DeliveryResponse)
+def driver_update_delivery_status(
+    delivery_id: int,
+    status_data: Dict[str, str],
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "driver":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки водіям")
+        
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id, Delivery.driver_id == current_user.id).first()
+    if not delivery:
+        raise HTTPException(status_code=404, detail="Доставку не знайдено або ви не є її водієм")
+        
+    new_status = status_data.get("status")
+    if new_status:
+        delivery.status = new_status
+        
+        # Симулюємо координати
+        start_c = [delivery.origin_lat, delivery.origin_lng]
+        end_c = [delivery.destination_lat, delivery.destination_lng]
+        
+        status_flow = ["Created", "Processing", "In_Transit"]
+        if delivery.is_cross_border:
+            status_flow.append("Customs")
+        status_flow.append("Delivered")
+        
+        if new_status in status_flow:
+            progress = status_flow.index(new_status) / (len(status_flow) - 1)
+            update_simulated_coords(delivery, start_c, end_c, progress)
+            
+        # Якщо статус Delivered, також звільняємо авто
+        if new_status == "Delivered" and delivery.vehicle_id:
+            vehicle = db.query(Vehicle).filter(Vehicle.id == delivery.vehicle_id).first()
+            if vehicle:
+                vehicle.status = "Available"
+                
+    db.commit()
+    db.refresh(delivery)
+    return delivery
+
+@router.post("/driver/{delivery_id}/photo", response_model=DeliveryResponse)
+async def driver_upload_photo_proof(
+    delivery_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.role != "driver":
+        raise HTTPException(status_code=403, detail="Доступ дозволено тільки водіям")
+        
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id, Delivery.driver_id == current_user.id).first()
+    if not delivery:
+        raise HTTPException(status_code=404, detail="Доставку не знайдено або ви не є її водієм")
+        
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Файл повинен бути зображенням")
+        
+    ext = file.filename.split(".")[-1]
+    filename = f"proof_{delivery.id}_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = f"data/proofs/{filename}"
+    
+    with open(filepath, "wb") as f:
+        f.write(await file.read())
+        
+    delivery.photo_proof = f"/api/deliveries/proofs/{filename}"
+    db.commit()
+    db.refresh(delivery)
+    return delivery
+
+@router.get("/proofs/{filename}")
+def get_photo_proof(filename: str):
+    filepath = f"data/proofs/{filename}"
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Фото не знайдено")
+    return FileResponse(filepath)
 

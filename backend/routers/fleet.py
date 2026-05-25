@@ -141,6 +141,7 @@ def search_city(q: str, db: Session = Depends(get_db)):
                 
                 results.append({
                     "name": city_name,
+                    "full_address": item.get("display_name"),
                     "country": addr.get("country", ""),
                     "state": addr.get("state"),
                     "lat": float(item.get("lat")),
@@ -162,12 +163,12 @@ def search_city(q: str, db: Session = Depends(get_db)):
         print(f"Geocoding error: {e}. Використовуємо локальний fallback.")
         # Локальний fallback для критичних міст при відсутності мережі
         FALLBACK = [
-            {"name": "Київ", "country": "Україна", "lat": 50.4501, "lon": 30.5234},
-            {"name": "Львів", "country": "Україна", "lat": 49.8397, "lon": 24.0297},
-            {"name": "Одеса", "country": "Україна", "lat": 46.4825, "lon": 30.7233},
-            {"name": "Харків", "country": "Україна", "lat": 49.9935, "lon": 36.2304},
-            {"name": "Дніпро", "country": "Україна", "lat": 48.4647, "lon": 35.0462},
-            {"name": "Варшава", "country": "Польща", "lat": 52.2297, "lon": 21.0122},
-            {"name": "Берлін", "country": "Німеччина", "lat": 52.5200, "lon": 13.4050}
+            {"name": "Київ", "full_address": "Київ, Україна", "country": "Україна", "lat": 50.4501, "lon": 30.5234},
+            {"name": "Львів", "full_address": "Львів, Україна", "country": "Україна", "lat": 49.8397, "lon": 24.0297},
+            {"name": "Одеса", "full_address": "Одеса, Україна", "country": "Україна", "lat": 46.4825, "lon": 30.7233},
+            {"name": "Харків", "full_address": "Харків, Україна", "country": "Україна", "lat": 49.9935, "lon": 36.2304},
+            {"name": "Дніпро", "full_address": "Дніпро, Україна", "country": "Україна", "lat": 48.4647, "lon": 35.0462},
+            {"name": "Варшава", "full_address": "Варшава, Польща", "country": "Польща", "lat": 52.2297, "lon": 21.0122},
+            {"name": "Берлін", "full_address": "Берлін, Німеччина", "country": "Німеччина", "lat": 52.5200, "lon": 13.4050}
         ]
-        return [c for c in FALLBACK if query_norm in c["name"].lower()]
+        return [c for c in FALLBACK if query_norm in c["name"].lower() or query_norm in c["full_address"].lower()]

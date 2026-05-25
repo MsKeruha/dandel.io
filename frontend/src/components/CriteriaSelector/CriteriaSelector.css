@@ -89,6 +89,11 @@
   gap: 0.35rem;
 }
 
+.input-group input,
+.input-group select {
+  width: 100%;
+}
+
 .input-group label {
   font-size: 0.8rem;
   font-weight: 700;

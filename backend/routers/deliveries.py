@@ -81,7 +81,8 @@ def get_route_data(start: List[float], end: List[float], scenario: str):
                 result["duration"] = route["duration"] / 3600.0 # в годинах
                 _ROUTE_CACHE[cache_key] = result
     except Exception as e:
-        print(f"OSRM Error: {e}")
+        from loguru import logger
+        logger.warning(f"OSRM Error, falling back to direct route: {e}")
         
     return result
 
@@ -428,15 +429,26 @@ def create_delivery(
     new_delivery.current_lat = start_coords[0]
     new_delivery.current_lng = start_coords[1]
 
-    db.add(new_delivery)
-    db.commit()
-    db.refresh(new_delivery)
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
+        db.add(new_delivery)
+        db.commit()
+        db.refresh(new_delivery)
+        
+        # Пов'язуємо трансакції з доставкою
+        tx_earn.delivery_id = new_delivery.id
+        if bonuses_to_spend > 0:
+            tx.delivery_id = new_delivery.id
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        from loguru import logger
+        logger.error(f"Database error during delivery creation: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Внутрішня помилка сервера при створенні доставки"
+        )
     
-    # Пов'язуємо трансакції з доставкою
-    tx_earn.delivery_id = new_delivery.id
-    if bonuses_to_spend > 0:
-        tx.delivery_id = new_delivery.id
-    db.commit()
     # Оновлюємо кеш користувача в токені якщо використовувались бонуси
     if order_in.use_bonuses and token_data:
         token_data.user.bonuses_balance = current_user.bonuses_balance

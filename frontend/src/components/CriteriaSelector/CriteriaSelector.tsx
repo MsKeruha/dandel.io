@@ -270,6 +270,13 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
             return;
         }
 
+        const cleanPhone = receiverPhone.replace(/\s+/g, '');
+        const phoneRegex = /^\+?[0-9]{10,15}$/;
+        if (!phoneRegex.test(cleanPhone)) {
+            showAlert('Телефон отримувача має некоректний формат (від 10 до 15 цифр, може починатися з +)', 'Увага');
+            return;
+        }
+
         // Замість прямого створення відкриваємо платіжну форму
         setShowPaymentForm(true);
     };

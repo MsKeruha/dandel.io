@@ -73,10 +73,20 @@ def register(user_in: UserCreate, db: Session = Depends(get_db)):
         bonuses_balance=100.0,  # Даруємо 100 вітальних бонусів (як символ розсіювання насіння!)
         loyalty_level_id=default_level.id if default_level else None
     )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    return new_user
+    from sqlalchemy.exc import SQLAlchemyError
+    try:
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+        return new_user
+    except SQLAlchemyError as e:
+        db.rollback()
+        from loguru import logger
+        logger.error(f"Database error during registration: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Внутрішня помилка сервера при створенні користувача"
+        )
 
 
 @router.post("/login", response_model=Token)

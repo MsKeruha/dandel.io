@@ -65,6 +65,10 @@ const DashboardContent: React.FC = () => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isRegisterMode) {
+      if (password.length < 8) {
+        showAlert('Помилка', 'Пароль має містити щонайменше 8 символів.');
+        return;
+      }
       const success = await register(email, fullName, password);
       if (success) {
         setIsRegisterMode(false);

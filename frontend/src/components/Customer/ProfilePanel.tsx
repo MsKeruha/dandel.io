@@ -26,6 +26,10 @@ export const ProfilePanel: React.FC = () => {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password && password.length < 8) {
+      showAlert('Пароль має містити щонайменше 8 символів.', 'Помилка');
+      return;
+    }
     const success = await updateProfile({ 
       full_name: fullName, 
       phone, 

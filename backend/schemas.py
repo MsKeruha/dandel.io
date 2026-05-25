@@ -8,18 +8,18 @@ class UserBase(BaseModel):
     full_name: str
 
 class UserCreate(UserBase):
-    password: str
+    password: str = Field(..., min_length=8)
 
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
-    phone: Optional[str] = None
+    full_name: Optional[str] = Field(None, max_length=100)
+    phone: Optional[str] = Field(None, pattern=r"^\+?[0-9]{10,15}$")
     address: Optional[str] = None
     avatar_url: Optional[str] = None
-    password: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=8)
 
 class UserResponse(UserBase):
     id: int
@@ -111,7 +111,7 @@ class DeliveryCalculateResponse(BaseModel):
 
 # Схеми для оформлення доставки
 class DeliveryCreate(BaseModel):
-    cargo_name: str
+    cargo_name: str = Field(..., max_length=100)
     cargo_type: str
     weight: float
     declared_value: float
@@ -122,10 +122,10 @@ class DeliveryCreate(BaseModel):
     origin_lng: float
     destination_lat: float
     destination_lng: float
-    sender_name: str
+    sender_name: str = Field(..., max_length=100)
     sender_address: str
-    receiver_name: str
-    receiver_phone: str
+    receiver_name: str = Field(..., max_length=100)
+    receiver_phone: str = Field(..., pattern=r"^\+?[0-9]{10,15}$")
     receiver_address: str
     scenario: str  # Експрес, Економ, Безпечний
     escort_requested: bool = False

@@ -1,7 +1,4 @@
 # --- Root ---
-.env
-.env.local
-.env.*.local
 *.log
 
 # --- Backend (Python) ---

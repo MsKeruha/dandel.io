@@ -449,7 +449,7 @@ export const AdminPanel: React.FC = () => {
           </div>
           <div>
             <h3>{Math.round(stats.totalCo2Saved)} кг</h3>
-            <span>Сэкономлено CO₂</span>
+            <span>Заощаджено CO₂</span>
           </div>
         </div>
       </div>

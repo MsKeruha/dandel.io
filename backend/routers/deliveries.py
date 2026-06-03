@@ -515,6 +515,7 @@ def simulate_delivery_step(
             
     db.commit()
     db.refresh(delivery)
+    return delivery
 from sqlalchemy import func
 
 @router.get("/admin/stats")

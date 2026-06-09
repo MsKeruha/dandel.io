@@ -12,13 +12,30 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem;
+  padding: 0.5rem 1rem;
   border-radius: var(--radius-lg);
   margin-bottom: 2rem;
   flex-wrap: nowrap;
-  gap: 0.5rem;
+  gap: 1rem;
   background: white;
   white-space: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+  width: 100%;
+  max-width: 100%;
+}
+
+.main-navbar::-webkit-scrollbar {
+  display: none;
+}
+
+.navbar-logo-area,
+.main-navbar > button,
+.navbar-tabs,
+.navbar-user-area {
+  flex-shrink: 0;
 }
 
 .navbar-logo-area {

@@ -65,6 +65,7 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
 
     // Додаткові поля замовлення
     const [senderName, setSenderName] = useState('');
+    const [senderEmail, setSenderEmail] = useState('');
     const [senderAddress, setSenderAddress] = useState('');
     const [receiverName, setReceiverName] = useState('');
     const [receiverPhone, setReceiverPhone] = useState('');
@@ -259,6 +260,7 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
         const missingFields = [];
         if (!cargoName.trim()) missingFields.push('Назва вантажу');
         if (!senderName.trim()) missingFields.push('Відправник');
+        if (!user && !senderEmail.trim()) missingFields.push('Email відправника');
         if (!senderAddress.trim()) missingFields.push('Відділення/Адреса відправника');
         if (!receiverName.trim()) missingFields.push('Отримувач');
         if (!receiverPhone.trim()) missingFields.push('Телефон отримувача');
@@ -268,6 +270,14 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
         if (missingFields.length > 0) {
             showAlert(`Будь ласка, заповніть обов'язкові поля: ${missingFields.join(', ')}`, 'Увага');
             return;
+        }
+
+        if (!user) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(senderEmail)) {
+                showAlert('Email відправника має некоректний формат', 'Увага');
+                return;
+            }
         }
 
         const cleanPhone = receiverPhone.replace(/\s+/g, '');
@@ -341,7 +351,8 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
             receiver_address: receiverAddress,
             scenario: finalScenario,
             escort_requested: finalScenario === 'Безпечний' ? escortRequested : false,
-            use_bonuses: useBonuses
+            use_bonuses: useBonuses,
+            sender_email: !user ? senderEmail : undefined
         };
 
         const result = await createDelivery(payload);
@@ -362,6 +373,7 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
             setShowCheckoutModal(false);
             setSelectedScenario(null);
             setCargoName('');
+            setSenderEmail('');
             setSenderAddress('');
             setReceiverName('');
             setReceiverPhone('');
@@ -369,13 +381,14 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
             setEscortRequested(false);
             setUseBonuses(false);
 
-            setTimeout(() => {
-                setOrderSuccess(false);
-                setGeneratedPassword(null);
-                if (onComplete) {
-                    onComplete();
-                }
-            }, 2000);
+            if (!result.password) {
+                setTimeout(() => {
+                    setOrderSuccess(false);
+                    if (onComplete) {
+                        onComplete();
+                    }
+                }, 3000);
+            }
         }
     };
 
@@ -633,10 +646,39 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
                                 <h5>Замовлення успішно оформлено!</h5>
                                 <p>Ваша вантажівка готова до відправлення.</p>
                                 {generatedPassword && (
-                                    <div style={{ marginTop: '10px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px' }}>
-                                        <strong style={{ color: 'var(--dandel-gold)' }}>Увага! Ваш кабінет створено.</strong>
-                                        <p style={{ margin: '5px 0 0 0' }}>Тимчасовий пароль для входу: <strong style={{ fontSize: '16px', letterSpacing: '1px' }}>{generatedPassword}</strong></p>
-                                        <p style={{ margin: '2px 0 0 0', fontSize: '12px', opacity: 0.8 }}>Збережіть його. Ви можете змінити пароль у профілі.</p>
+                                    <div style={{ marginTop: '10px', background: 'rgba(0,0,0,0.3)', padding: '15px', borderRadius: '8px', color: 'white' }}>
+                                        <strong style={{ color: 'var(--dandel-gold)', display: 'block', marginBottom: '5px' }}>Увага! Ваш кабінет створено.</strong>
+                                        <p style={{ margin: '5px 0', color: 'white', opacity: 1, fontSize: '0.9rem' }}>
+                                            Тимчасовий пароль для входу: <strong style={{ fontSize: '16px', letterSpacing: '1px', color: 'var(--dandel-gold)' }}>{generatedPassword}</strong>
+                                        </p>
+                                        <p style={{ margin: '5px 0 0 0', fontSize: '12px', opacity: 0.9, color: 'white' }}>
+                                            Збережіть його. Ви можете змінити пароль у профілі.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            className="btn-primary"
+                                            style={{
+                                                marginTop: '12px',
+                                                padding: '8px 16px',
+                                                fontSize: '0.85rem',
+                                                background: 'var(--dandel-gold)',
+                                                color: 'var(--dandel-meadow-dark)',
+                                                border: 'none',
+                                                borderRadius: '8px',
+                                                cursor: 'pointer',
+                                                fontWeight: 'bold',
+                                                display: 'block'
+                                            }}
+                                            onClick={() => {
+                                                setOrderSuccess(false);
+                                                setGeneratedPassword(null);
+                                                if (onComplete) {
+                                                    onComplete();
+                                                }
+                                            }}
+                                        >
+                                            Записав
+                                        </button>
                                     </div>
                                 )}
                             </div>
@@ -718,7 +760,7 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
                             <div className="auth-brand" style={{ marginBottom: '20px', display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                     <Icon name="file-text" size={24} color="var(--dandel-green)" />
-                                    <h3 style={{ margin: 0, color: 'white' }}>Деталі доставки («{selectedScenario || currentCalculation.recommended_scenario}»)</h3>
+                                    <h3 style={{ margin: 0, color: 'var(--dandel-meadow-dark)' }}>Деталі доставки («{selectedScenario || currentCalculation.recommended_scenario}»)</h3>
                                 </div>
                                 <button className="btn-secondary" onClick={() => setShowCheckoutModal(false)} style={{ padding: '8px 12px' }}>
                                     <Icon name="arrow-left" size={16} /> Назад
@@ -754,6 +796,18 @@ export const CriteriaSelector: React.FC<CriteriaSelectorProps> = ({ onComplete }
                                             required
                                         />
                                     </div>
+                                    {!user && (
+                                        <div className="input-group">
+                                            <label><Icon name="mail" size={14} /> Email відправника (для створення кабінету)</label>
+                                            <input
+                                                type="email"
+                                                placeholder="your.email@example.com"
+                                                value={senderEmail}
+                                                onChange={e => setSenderEmail(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                    )}
                                     <div className="input-group autocomplete-group" ref={senderAddressRef}>
                                         <label><Icon name="map-pin" size={14} /> Відділення/Адреса відправника</label>
                                         <div className="search-input-wrapper">

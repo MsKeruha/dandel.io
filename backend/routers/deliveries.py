@@ -260,7 +260,7 @@ def create_delivery(
     if not current_user:
         # Генеруємо пошту з телефону якщо її немає (або просто dummy email)
         phone_clean = ''.join(filter(str.isdigit, order_in.receiver_phone))
-        guest_email = f"guest_{phone_clean}@dandel.io"
+        guest_email = order_in.sender_email or f"guest_{phone_clean}@dandel.io"
         
         # Перевіряємо чи вже є
         db_user = db.query(User).filter(User.email == guest_email).first()

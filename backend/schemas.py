@@ -130,6 +130,7 @@ class DeliveryCreate(BaseModel):
     scenario: str  # Експрес, Економ, Безпечний
     escort_requested: bool = False
     use_bonuses: bool = False  # чи списувати доступні бонуси користувача
+    sender_email: Optional[EmailStr] = None
 
 
 class DeliveryResponse(BaseModel):

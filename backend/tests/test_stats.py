@@ -19,7 +19,7 @@ def test_get_public_stats(client):
 
 
 def test_admin_stats_success(client, db_session):
-    # Регистрируем обычного пользователя
+    # Реєструємо звичайного користувача
     user_data = {
         "email": "admin_test@dandel.io",
         "password": "adminpassword123",
@@ -27,12 +27,12 @@ def test_admin_stats_success(client, db_session):
     }
     client.post("/api/auth/register", json=user_data)
     
-    # Меняем роль в базе данных на admin
+    # Змінюємо роль у базі даних на admin
     user = db_session.query(models.User).filter(models.User.email == user_data["email"]).first()
     user.role = "admin"
     db_session.commit()
     
-    # Добавим для теста одну доставку в базу данных
+    # Додамо для тесту одну доставку в базу даних
     delivery = models.Delivery(
         sender_id=user.id,
         cargo_name="Вантаж для статистики",
@@ -48,20 +48,20 @@ def test_admin_stats_success(client, db_session):
         price=1000.0,
         duration_hours=6.0,
         safety_score=8.0,
-        co2_footprint=2.0,  # 10.0 * 0.42 - 2.0 = 2.2 кг CO2 спасенного
+        co2_footprint=2.0,  # 10.0 * 0.42 - 2.0 = 2.2 кг CO2 збереженого
         bonuses_earned=50.0
     )
     db_session.add(delivery)
     db_session.commit()
     
-    # Авторизуемся
+    # Авторизуємося
     login_response = client.post("/api/auth/login", json={
         "email": user_data["email"],
         "password": user_data["password"]
     })
     token = login_response.json()["access_token"]
     
-    # Делаем запрос к админской статистике
+    # Робимо запит до адмінської статистики
     response = client.get("/api/deliveries/admin/stats", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
@@ -74,7 +74,7 @@ def test_admin_stats_success(client, db_session):
 
 
 def test_admin_stats_forbidden(client):
-    # Регистрируем обычного пользователя (роль по умолчанию 'customer')
+    # Реєструємо звичайного користувача (роль за замовчуванням 'customer')
     user_data = {
         "email": "customer_test@dandel.io",
         "password": "password123",
@@ -82,14 +82,14 @@ def test_admin_stats_forbidden(client):
     }
     client.post("/api/auth/register", json=user_data)
     
-    # Авторизуемся
+    # Авторизуємося
     login_response = client.post("/api/auth/login", json={
         "email": user_data["email"],
         "password": user_data["password"]
     })
     token = login_response.json()["access_token"]
     
-    # Пытаемся зайти в админку
+    # Намагаємося зайти в адмінпанель
     response = client.get("/api/deliveries/admin/stats", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert "Доступ заборонено" in response.json()["detail"]

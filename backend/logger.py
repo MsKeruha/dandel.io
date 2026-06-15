@@ -4,7 +4,7 @@ from loguru import logger
 
 class InterceptHandler(logging.Handler):
     """
-    Класс для перехвата стандартных логов (напр. от uvicorn/fastapi)
+    Клас для перехоплення стандартних логів (напр. від uvicorn/fastapi)
     і перенаправлення їх у loguru.
     """
     def emit(self, record):

@@ -31,7 +31,7 @@ def test_calculate_options_success(client):
     assert "Економ" in scenarios
     assert "Безпечний" in scenarios
     
-    # Проверяем, что у каждого сценария есть SAW-оценка
+    # Перевіряємо, що у кожного сценарію є SAW-оцінка
     for name, details in scenarios.items():
         assert "saw_score" in details
         assert details["price"] > 0
@@ -98,17 +98,17 @@ def test_create_delivery_guest(client, db_session):
     delivery_data = data["delivery"]
     assert delivery_data["cargo_name"] == order_data["cargo_name"]
     assert delivery_data["status"] == "Created"
-    # Для гостя создается пользователь
+    # Для гостя створюється користувач
     assert data["token"]["user"]["email"] == "guest_380998887766@dandel.io"
     
-    # Проверяем, что автоматически подобрались машина и водитель из conftest.py
+    # Перевіряємо, що автоматично підібралися машина та водій з conftest.py
     delivery_db = db_session.query(models.Delivery).filter(models.Delivery.id == delivery_data["id"]).first()
     assert delivery_db.vehicle_id is not None
     assert delivery_db.driver_id is not None
 
 
 def test_create_delivery_user_with_bonuses(client, db_session):
-    # Регистрируем пользователя
+    # Реєструємо користувача
     user_data = {
         "email": "loyalty_user@dandel.io",
         "password": "userpass123",
@@ -117,7 +117,7 @@ def test_create_delivery_user_with_bonuses(client, db_session):
     register_response = client.post("/api/auth/register", json=user_data)
     assert register_response.status_code == status.HTTP_201_CREATED
     
-    # Авторизуемся
+    # Авторизуємося
     login_response = client.post("/api/auth/login", json={
         "email": user_data["email"],
         "password": user_data["password"]
@@ -125,7 +125,7 @@ def test_create_delivery_user_with_bonuses(client, db_session):
     token = login_response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     
-    # У пользователя 100 приветственных бонусов. Создаем доставку с бонусами.
+    # У користувача 100 привітальних бонусів. Створюємо доставку з бонусами.
     order_data = {
         "cargo_name": "Бочки з фарбою",
         "cargo_type": "Стандартний",
@@ -154,22 +154,22 @@ def test_create_delivery_user_with_bonuses(client, db_session):
     data = response.json()
     delivery_data = data["delivery"]
     
-    # Проверяем бонусы
-    assert delivery_data["bonuses_spent"] == 100.0  # Списали все 100 доступных бонусов
-    assert delivery_data["bonuses_earned"] > 0       # Начислили кешбэк
+    # Перевіряємо бонуси
+    assert delivery_data["bonuses_spent"] == 100.0  # Списали всі 100 доступних бонусів
+    assert delivery_data["bonuses_earned"] > 0       # Нарахували кешбек
     
-    # Проверяем баланс пользователя в БД
+    # Перевіряємо баланс користувача в БД
     user = db_session.query(models.User).filter(models.User.email == user_data["email"]).first()
-    # Баланс должен быть равен: 0 (после списания 100 бонусов) + bonuses_earned (кешбэк)
+    # Баланс має дорівнювати: 0 (після списання 100 бонусів) + bonuses_earned (кешбек)
     assert user.bonuses_balance == delivery_data["bonuses_earned"]
     
-    # Должны быть транзакции бонусов
+    # Мають бути трансакції бонусів
     transactions = db_session.query(models.BonusTransaction).filter(models.BonusTransaction.user_id == user.id).all()
-    assert len(transactions) == 2  # -100 списание, +кешбэк начисление (приветственные 100 не создают транзакцию в БД)
+    assert len(transactions) == 2  # -100 списання, +кешбек нарахування (привітальні 100 не створюють трансакцію в БД)
 
 
 def test_simulate_delivery_step(client, db_session):
-    # Регистрируем пользователя и создаем доставку
+    # Реєструємо користувача та створюємо доставку
     user_data = {
         "email": "simulate@dandel.io",
         "password": "password123",
@@ -208,12 +208,12 @@ def test_simulate_delivery_step(client, db_session):
     create_response = client.post("/api/deliveries/create", json=order_data, headers=headers)
     delivery_id = create_response.json()["delivery"]["id"]
     
-    # Первая симуляция шага (Created -> Processing)
+    # Перша симуляція кроку (Created -> Processing)
     sim_response = client.post(f"/api/deliveries/{delivery_id}/simulate-step", headers=headers)
     assert sim_response.status_code == status.HTTP_200_OK
     assert sim_response.json()["status"] == "Processing"
     
-    # Вторая симуляция (Processing -> In_Transit)
+    # Друга симуляція (Processing -> In_Transit)
     sim_response = client.post(f"/api/deliveries/{delivery_id}/simulate-step", headers=headers)
     assert sim_response.json()["status"] == "In_Transit"
     assert sim_response.json()["photo_proof"] is not None

@@ -14,10 +14,10 @@ def test_register_success(client, db_session):
     data = response.json()
     assert data["email"] == user_data["email"]
     assert data["full_name"] == user_data["full_name"]
-    # Проверяем, что начислено 100 приветственных бонусов
+    # Перевіряємо, що нараховано 100 привітальних бонусів
     assert data["bonuses_balance"] == 100.0
     
-    # Проверяем в базе данных
+    # Перевіряємо в базі даних
     user = db_session.query(models.User).filter(models.User.email == user_data["email"]).first()
     assert user is not None
     assert user.loyalty_level == "Насіння"
@@ -30,11 +30,11 @@ def test_register_duplicate_email(client):
         "full_name": "Перший Користувач"
     }
     
-    # Первая регистрация
+    # Перша реєстрація
     response1 = client.post("/api/auth/register", json=user_data)
     assert response1.status_code == status.HTTP_201_CREATED
     
-    # Повторная регистрация с тем же email
+    # Повторна реєстрація з тим самим email
     response2 = client.post("/api/auth/register", json=user_data)
     assert response2.status_code == status.HTTP_400_BAD_REQUEST
     assert "вже зареєстрований" in response2.json()["detail"]
@@ -46,10 +46,10 @@ def test_login_success(client):
         "password": "correct_password",
         "full_name": "Петро Логін"
     }
-    # Регистрируем
+    # Реєструємо
     client.post("/api/auth/register", json=user_data)
     
-    # Логинимся
+    # Логінимося
     login_data = {
         "email": user_data["email"],
         "password": user_data["password"]
@@ -71,7 +71,7 @@ def test_login_wrong_password(client):
     }
     client.post("/api/auth/register", json=user_data)
     
-    # Вход с неправильным паролем
+    # Вхід із неправильним паролем
     login_data = {
         "email": user_data["email"],
         "password": "wrong_password"
@@ -83,6 +83,6 @@ def test_login_wrong_password(client):
 
 
 def test_get_current_user_unauthorized(client):
-    # Попытка сделать запрос к защищенному эндпоинту "my deliveries" без авторизации
+    # Спроба зробити запит до захищеного ендпоінту "my deliveries" без авторизації
     response = client.get("/api/deliveries/my")
     assert response.status_code == status.HTTP_401_UNAUTHORIZED

@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
-# Добавляем корневой каталог в пути импорта, чтобы pytest видел модули
+# Додаємо кореневу директорію до шляхів імпорту, щоб pytest бачив модулі
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,7 +15,7 @@ from main import app
 import models
 from auth_utils import get_password_hash
 
-# Используем SQLite в памяти для тестов
+# Використовуємо SQLite в пам'яті для тестів
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
 engine = create_engine(
@@ -23,24 +23,24 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Фикстура для создания структуры базы данных и наполнения базовыми справочниками
+# Фікстура для створення структури бази даних та наповнення базовими довідниками
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
-    # Создаем таблицы
+    # Створюємо таблиці
     Base.metadata.create_all(bind=engine)
     
     db = TestingSessionLocal()
     try:
-        # 1. Заполняем уровни лояльности
+        # 1. Заповнюємо рівні лояльності
         levels = [
-            models.LoyaltyLevel(name="Насіння", min_bonuses=0.0, discount_percentage=5.0, description="Стартовый уровень"),
-            models.LoyaltyLevel(name="Парашутик", min_bonuses=100.0, discount_percentage=7.0, description="Второй уровень"),
-            models.LoyaltyLevel(name="Суцвіття", min_bonuses=500.0, discount_percentage=10.0, description="Третий уровень"),
-            models.LoyaltyLevel(name="Золота кульбаба", min_bonuses=1500.0, discount_percentage=15.0, description="Максимальный уровень")
+            models.LoyaltyLevel(name="Насіння", min_bonuses=0.0, discount_percentage=5.0, description="Стартовий рівень"),
+            models.LoyaltyLevel(name="Парашутик", min_bonuses=100.0, discount_percentage=7.0, description="Другий рівень"),
+            models.LoyaltyLevel(name="Суцвіття", min_bonuses=500.0, discount_percentage=10.0, description="Третій рівень"),
+            models.LoyaltyLevel(name="Золота кульбаба", min_bonuses=1500.0, discount_percentage=15.0, description="Максимальний рівень")
         ]
         db.add_all(levels)
         
-        # 2. Заполняем дефолтную доступную машину
+        # 2. Заповнюємо дефолтну доступну машину
         vehicle = models.Vehicle(
             plate="AA 0001 AA",
             model="Mercedes Sprinter",
@@ -52,7 +52,7 @@ def setup_database():
         )
         db.add(vehicle)
         
-        # 3. Заполняем дефолтного водителя
+        # 3. Заповнюємо дефолтного водія
         driver = models.User(
             email="driver@dandel.io",
             full_name="Андрій Колісник",
@@ -63,7 +63,7 @@ def setup_database():
         )
         db.add(driver)
         
-        # 4. Заполняем тестовые небезпечні зони
+        # 4. Заповнюємо тестові небезпечні зони
         zone = models.RiskZone(
             name="Зона ризику",
             lat=48.6,
@@ -82,11 +82,11 @@ def setup_database():
         
     yield
     
-    # Очищаем таблицы после завершения сессии
+    # Очищаємо таблиці після завершення сесії
     Base.metadata.drop_all(bind=engine)
 
 
-# Фикстура для изолированной сессии базы данных на каждый тест
+# Фікстура для ізольованої сесії бази даних на кожен тест
 @pytest.fixture
 def db_session():
     connection = engine.connect()
@@ -100,7 +100,7 @@ def db_session():
     connection.close()
 
 
-# Фикстура для TestClient с переопределенной зависимостью БД
+# Фікстура для TestClient з перевизначеною залежністю БД
 @pytest.fixture
 def client(db_session):
     def override_get_db():
@@ -115,12 +115,12 @@ def client(db_session):
     app.dependency_overrides.pop(get_db, None)
 
 
-# Автоматический мок для сетевых OSRM-запросов во время тестов
+# Автоматичний мок для мережевих OSRM-запитів під час тестів
 @pytest.fixture(scope="session", autouse=True)
 def mock_osrm():
     with patch("urllib.request.urlopen") as mock_urlopen:
         mock_response = MagicMock()
-        # Возвращаем симулированный ответ с расстоянием 540км и длительностью 6 часов (21600 секунд)
+        # Повертаємо симульовану відповідь із відстанню 540км та тривалістю 6 годин (21600 секунд)
         mock_response.read.return_value = json.dumps({
             "routes": [
                 {

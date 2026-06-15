@@ -10,7 +10,7 @@ def test_get_me_success(client):
     }
     client.post("/api/auth/register", json=user_data)
     
-    # Авторизуемся
+    # Авторизуємося
     login_response = client.post("/api/auth/login", json={
         "email": user_data["email"],
         "password": user_data["password"]
@@ -57,7 +57,7 @@ def test_update_me_success(client, db_session):
     assert data["phone"] == update_data["phone"]
     assert data["address"] == update_data["address"]
     
-    # Проверяем в БД напрямую
+    # Перевіряємо в БД напряму
     user = db_session.query(models.User).filter(models.User.email == user_data["email"]).first()
     assert user.full_name == update_data["full_name"]
     assert user.phone == update_data["phone"]
@@ -65,7 +65,7 @@ def test_update_me_success(client, db_session):
 
 
 def test_get_bonus_history(client, db_session):
-    # Регистрируем пользователя
+    # Реєструємо користувача
     user_data = {
         "email": "bonus_history@dandel.io",
         "password": "password123",
@@ -79,7 +79,7 @@ def test_get_bonus_history(client, db_session):
     })
     token = login_response.json()["access_token"]
     
-    # Напрямую в БД добавляем транзакцию для теста
+    # Напряму в БД додаємо транзакцію для тесту
     user = db_session.query(models.User).filter(models.User.email == user_data["email"]).first()
     transaction = models.BonusTransaction(
         user_id=user.id,
@@ -99,12 +99,12 @@ def test_get_bonus_history(client, db_session):
 
 
 def test_get_loyalty_levels(client):
-    # Уровни лояльности доступны без авторизации
+    # Рівні лояльності доступні без авторизації
     response = client.get("/api/users/loyalty-levels")
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
     
-    # В conftest.py мы добавили 4 уровня
+    # У conftest.py ми додали 4 рівні
     assert len(data) == 4
     names = [level["name"] for level in data]
     assert "Насіння" in names
